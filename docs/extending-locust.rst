@@ -11,8 +11,8 @@ For example, here's how to set up an event listener that will trigger after a re
     from locust import events
     
     @events.request.add_listener
-    def my_request_handler(request_type, name, response_time, response_length, response,
-                           context, exception, start_time, url, **kwargs):
+    def my_request_handler(*, name, exception, response, **kwargs):
+
         if exception:
             print(f"Request to {name} failed with exception {exception}")
         else:
@@ -21,7 +21,10 @@ For example, here's how to set up an event listener that will trigger after a re
 
 .. note::
 
-    In the above example the wildcard keyword argument (\**kwargs) will be empty, because we're handling all arguments, but it prevents the code from breaking if new arguments are added in some future version of Locust.
+     In the above example the wildcard keyword argument (\**kwargs) will contain additional request
+    items because we're not handling all arguments and this code will not break if new arguments
+    are added in some future version of Locust. Additional arguments include:
+        request_type, ttlb, ttfb, response_length, context, start_time, url
 
     Also, it is entirely possible to implement a client that does not supply all parameters for this event.
     For example, non-HTTP protocols might not even have the a concept of `url` or `response` object. 

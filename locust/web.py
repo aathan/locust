@@ -325,8 +325,10 @@ class WebUI:
                     "errors": errors,
                     "total_rps": 0.0,
                     "fail_ratio": 0.0,
-                    "current_response_time_percentile_95": None,
-                    "current_response_time_percentile_50": None,
+                    "current_ttlb_percentile_95": None,
+                    "current_ttlb_percentile_50": None,
+                    "current_ttfb_percentile_95": None,
+                    "current_ttfb_percentile_50": None,
                     "state": STATE_MISSING,
                     "user_count": 0,
                 }
@@ -339,19 +341,30 @@ class WebUI:
             for s in chain(sort_stats(environment.runner.stats.entries), [environment.runner.stats.total]):
                 stats.append(
                     {
-                        "method": s.method,
-                        "name": s.name,
-                        "safe_name": escape(s.name, quote=False),
+                        "method": s.key[1],
+                        "name": s.key[0],
+                        "safe_name": escape(s.key[0], quote=False),
                         "num_requests": s.num_requests,
                         "num_failures": s.num_failures,
-                        "avg_response_time": s.avg_response_time,
-                        "min_response_time": 0 if s.min_response_time is None else proper_round(s.min_response_time),
-                        "max_response_time": proper_round(s.max_response_time),
+
+                        "avg_ttlb": s.ttlb.avg,
+                        "min_ttlb": 0 if s.min_ttlb is None else proper_round(s.min_ttlb),
+                        "max_ttlb": proper_round(s.max_ttlb),
                         "current_rps": s.current_rps,
                         "current_fail_per_sec": s.current_fail_per_sec,
-                        "median_response_time": s.median_response_time,
-                        "ninetieth_response_time": s.get_response_time_percentile(0.9),
-                        "ninety_ninth_response_time": s.get_response_time_percentile(0.99),
+                        "median_ttlb": s.median_ttlb,
+                        "ninetieth_ttlb": s.get_ttlb_percentile(0.9),
+                        "ninety_ninth_ttlb": s.get_ttlb_percentile(0.99),
+
+                        "avg_ttfb": s.ttfb.avg,
+                        "min_ttfb": 0 if s.min_ttfb is None else proper_round(s.min_ttfb),
+                        "max_ttfb": proper_round(s.max_ttfb),
+                        "current_rps": s.current_rps,
+                        "current_fail_per_sec": s.current_fail_per_sec,
+                        "median_ttfb": s.median_ttfb,
+                        "ninetieth_ttfb": s.get_ttfb_percentile(0.9),
+                        "ninety_ninth_ttfb": s.get_ttfb_percentile(0.99),
+
                         "avg_content_length": s.avg_content_length,
                     }
                 )
@@ -374,11 +387,17 @@ class WebUI:
                 report["total_rps"] = stats[len(stats) - 1]["current_rps"]
                 report["fail_ratio"] = environment.runner.stats.total.fail_ratio
                 report[
-                    "current_response_time_percentile_95"
-                ] = environment.runner.stats.total.get_current_response_time_percentile(0.95)
+                    "current_ttlb_percentile_95"
+                ] = environment.runner.stats.total.get_current_ttlb_percentile(0.95)
                 report[
-                    "current_response_time_percentile_50"
-                ] = environment.runner.stats.total.get_current_response_time_percentile(0.5)
+                    "current_ttlb_percentile_50"
+                ] = environment.runner.stats.total.get_current_ttlb_percentile(0.5)
+                report[
+                    "current_ttfb_percentile_95"
+                ] = environment.runner.stats.total.get_current_ttfb_percentile(0.95)
+                report[
+                    "current_ttfb_percentile_50"
+                ] = environment.runner.stats.total.get_current_ttfb_percentile(0.5)
 
             if isinstance(environment.runner, MasterRunner):
                 workers = []

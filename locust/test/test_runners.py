@@ -345,12 +345,15 @@ class TestLocustRunner(LocustRunnerTestCase):
                 @task
                 def my_task(self):
                     self.user.environment.events.request.fire(
-                        request_type="GET",
-                        name="/test",
-                        response_time=666,
-                        response_length=1337,
-                        exception=None,
-                        context={},
+                        dict(
+                            request_type="GET",
+                            name="/test",
+                            ttlb=666,
+                            ttfb=555,
+                            response_length=1337,
+                            exception=None,
+                            context={},
+                        )
                     )
                     # Make sure each user only run this task once during the test
                     sleep(30)
@@ -370,14 +373,15 @@ class TestLocustRunner(LocustRunnerTestCase):
             class task_set(TaskSet):
                 @task
                 def my_task(self):
-                    self.user.environment.events.request.fire(
+                    self.user.environment.events.request.fire(dict(
                         request_type="GET",
                         name="/test",
-                        response_time=666,
+                        ttlb=666,
+                        ttfb=555,
                         response_length=1337,
                         exception=None,
                         context={},
-                    )
+                    ))
                     sleep(2)
 
         environment = Environment(reset_stats=False, user_classes=[MyUser])
@@ -836,14 +840,15 @@ class TestMasterWorkerRunners(LocustTestCase):
 
             @task
             def incr_stats(self):
-                self.environment.events.request.fire(
+                self.environment.events.request.fire(dict(
                     request_type="GET",
                     name="/",
-                    response_time=1337,
+                    ttlb=1337,
+                    ttfb=1237
                     response_length=666,
                     exception=None,
                     context={},
-                )
+                )()
 
         with mock.patch("locust.runners.WORKER_REPORT_INTERVAL", new=0.3):
             # start a Master runner
@@ -890,14 +895,15 @@ class TestMasterWorkerRunners(LocustTestCase):
 
             @task
             def incr_stats(self):
-                self.environment.events.request.fire(
+                self.environment.events.request.fire(dict(
                     request_type="GET",
                     name="/",
-                    response_time=1337,
+                    ttlb=1337,
+                    ttfb=1237,
                     response_length=666,
                     exception=None,
                     context={},
-                )
+                ))
 
         with mock.patch("locust.runners.WORKER_REPORT_INTERVAL", new=0.3), patch_env(
             "LOCUST_WAIT_FOR_WORKERS_REPORT_AFTER_RAMP_UP", "0.1"
@@ -993,14 +999,15 @@ class TestMasterWorkerRunners(LocustTestCase):
 
             @task
             def incr_stats(self):
-                self.environment.events.request.fire(
+                self.environment.events.request.fire(dict()
                     request_type="GET",
                     name=self.environment.parsed_options.my_str_argument,
-                    response_time=self.environment.parsed_options.my_int_argument,
+                    ttlb=self.environment.parsed_options.my_int_argument,
+                    ttfb=self.environment.parsed_options.my_int_argument,
                     response_length=666,
                     exception=None,
                     context={},
-                )
+                ))
 
         @locust.events.init_command_line_parser.add_listener
         def _(parser, **kw):
@@ -1042,8 +1049,8 @@ class TestMasterWorkerRunners(LocustTestCase):
             for worker in workers:
                 self.assertEqual(0, worker.user_count)
 
-        self.assertEqual(master_env.runner.stats.total.max_response_time, 42)
-        self.assertEqual(master_env.runner.stats.get("cool-string", "GET").avg_response_time, 42)
+        self.assertEqual(master_env.runner.stats.total.ttlb.max, 42)
+        self.assertEqual(master_env.runner.stats.get("cool-string", "GET").ttlb.avg, 42)
 
     def test_test_stop_event(self):
         class TestUser(User):
@@ -2056,9 +2063,9 @@ class TestMasterRunner(LocustRunnerTestCase):
 
             server.mocked_send(Message("stats", data, "fake_client"))
             s = master.stats.get("/", "GET")
-            self.assertEqual(700, s.median_response_time)
+            self.assertEqual(700, s.ttlb.median)
 
-    def test_worker_stats_report_with_none_response_times(self):
+    def test_worker_stats_report_with_none_response_times(self): # TODO special case of ttlb None
         with mock.patch("locust.rpc.rpc.Server", mocked_rpc()) as server:
             master = self.get_runner()
             server.mocked_send(Message("client_ready", __version__, "fake_client"))
@@ -2078,11 +2085,11 @@ class TestMasterRunner(LocustRunnerTestCase):
 
             server.mocked_send(Message("stats", data, "fake_client"))
             s1 = master.stats.get("/mixed", "GET")
-            self.assertEqual(700, s1.median_response_time)
-            self.assertEqual(500, s1.avg_response_time)
+            self.assertEqual(700, s1.ttlb.median)
+            self.assertEqual(500, s1.ttlb.avg)
             s2 = master.stats.get("/onlyNone", "GET")
-            self.assertEqual(0, s2.median_response_time)
-            self.assertEqual(0, s2.avg_response_time)
+            self.assertEqual(0, s2.ttlb.median)
+            self.assertEqual(0, s2.ttlb.avg)
 
     def test_master_marks_downed_workers_as_missing(self):
         with mock.patch("locust.rpc.rpc.Server", mocked_rpc()) as server:
@@ -2312,7 +2319,7 @@ class TestMasterRunner(LocustRunnerTestCase):
                     "fake_client",
                 )
             )
-            self.assertEqual(700, master.stats.total.median_response_time)
+            self.assertEqual(700, master.stats.total.ttlb.median)
 
     def test_master_total_stats_with_none_response_times(self):
         with mock.patch("locust.rpc.rpc.Server", mocked_rpc()) as server:
@@ -2363,7 +2370,7 @@ class TestMasterRunner(LocustRunnerTestCase):
                     "fake_client",
                 )
             )
-            self.assertEqual(700, master.stats.total.median_response_time)
+            self.assertEqual(700, master.stats.total.ttlb.median)
 
     def test_master_current_response_times(self):
         start_time = 1
@@ -2405,8 +2412,8 @@ class TestMasterRunner(LocustRunnerTestCase):
                     )
                 )
                 mocked_time.return_value += 4
-                self.assertEqual(400, master.stats.total.get_current_response_time_percentile(0.5))
-                self.assertEqual(800, master.stats.total.get_current_response_time_percentile(0.95))
+                self.assertEqual(400, master.stats.total.ttlb.get_current_percentile(0.5))
+                self.assertEqual(800, master.stats.total.ttlb.get_current_percentile(0.95))
 
                 # let 10 second pass, do some more requests, send it to the master and make
                 # sure the current response time percentiles only accounts for these new requests
@@ -2426,8 +2433,8 @@ class TestMasterRunner(LocustRunnerTestCase):
                         "fake_client",
                     )
                 )
-                self.assertEqual(30, master.stats.total.get_current_response_time_percentile(0.5))
-                self.assertEqual(3000, master.stats.total.get_current_response_time_percentile(0.95))
+                self.assertEqual(30, master.stats.total.ttlb.get_current_percentile(0.5))
+                self.assertEqual(3000, master.stats.total.ttlb.get_current_percentile(0.95))
 
     @mock.patch("locust.runners.HEARTBEAT_INTERVAL", new=600)
     def test_rebalance_locust_users_on_worker_connect(self):

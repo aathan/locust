@@ -50,13 +50,13 @@ class TestHttpSession(WebserverTestCase):
         r = s.get("/streaming/30")
 
         # verify that the time reported includes the download time of the whole streamed response
-        self.assertGreater(self.runner.stats.get("/streaming/30", method="GET").avg_response_time, 250)
+        self.assertGreater(self.runner.stats.get("/streaming/30", method="GET").ttlb.avg, 250)
         self.runner.stats.clear_all()
 
         # verify that response time does NOT include whole download time, when using stream=True
         r = s.get("/streaming/30", stream=True)
-        self.assertGreater(self.runner.stats.get("/streaming/30", method="GET").avg_response_time, 0)
-        self.assertLess(self.runner.stats.get("/streaming/30", method="GET").avg_response_time, 250)
+        self.assertGreater(self.runner.stats.get("/streaming/30", method="GET").ttlb.avg, 0)
+        self.assertLess(self.runner.stats.get("/streaming/30", method="GET").ttlb.avg, 250)
 
         # download the content of the streaming response (so we don't get an ugly exception in the log)
         _ = r.content
@@ -67,7 +67,7 @@ class TestHttpSession(WebserverTestCase):
         r = s.get(url)
         stats = self.runner.stats.get(url, method="GET")
         self.assertEqual(1, stats.num_requests)
-        self.assertGreater(stats.avg_response_time, 500)
+        self.assertGreater(stats.ttlb.avg, 500)
 
     def test_post_redirect(self):
         s = self.get_client()
@@ -176,7 +176,7 @@ class TestHttpSession(WebserverTestCase):
         after_request = time.time()
         self.assertIn("for url: replaced_url_name", str(kwargs["exception"]))
         self.assertAlmostEqual(before_request, kwargs["start_time"], delta=0.01)
-        self.assertAlmostEqual(after_request, kwargs["start_time"] + kwargs["response_time"] / 1000, delta=0.01)
+        self.assertAlmostEqual(after_request, kwargs["start_time"] + kwargs["ttlb"] / 1000, delta=0.01)
         self.assertEqual(s.base_url + "/wrong_url/01", kwargs["url"])  # url is unaffected by name
         self.assertDictEqual({"foo": "bar"}, kwargs["context"])
 
@@ -220,7 +220,7 @@ class TestHttpSession(WebserverTestCase):
     def test_catch_response_timeout(self):
         s = self.get_client()
         with s.get("/slow", catch_response=True, timeout=0.1) as r:
-            self.assertAlmostEqual(r.request_meta["response_time"], 100, delta=50)
+            self.assertAlmostEqual(r.request_meta["ttlb"], 100, delta=50)
         self.assertEqual(1, self.environment.stats.total.num_requests)
         self.assertEqual(1, self.environment.stats.total.num_failures)
 

@@ -45,7 +45,7 @@ Locust can also visualize the results as charts, showing things like requests pe
 
 .. image:: images/total_requests_per_second.png
 
-Response times (in milliseconds):
+Response times (in milliseconds) -- needs new png:
 
 .. image:: images/response_times.png
 

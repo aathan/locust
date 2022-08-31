@@ -15,7 +15,7 @@ from locust.stats import (
     CachedResponseTimes,
     RequestStats,
     StatsEntry,
-    diff_response_time_dicts,
+    diff_entry_dicts,
     PERCENTILES_TO_REPORT,
     STATS_NAME_WIDTH,
     STATS_TYPE_WIDTH,
@@ -48,9 +48,9 @@ class TestRequestStats(unittest.TestCase):
         self.stats = RequestStats()
 
         def log(response_time, size):
-            self.stats.log_request("GET", "test_entry", response_time, size)
+            self.stats.log_request(dict(method="GET", name="test_entry", ttlb=response_time, ttfb=response_time, response_length=size))
 
-        def log_error(exc):
+        def log_error_direct(exc):
             self.stats.log_error("GET", "test_entry", exc)
 
         log(45, 1)
@@ -64,7 +64,8 @@ class TestRequestStats(unittest.TestCase):
         log(35, 1)
         log(79, 1)
         log(None, 1)
-        log_error(Exception("dummy fail"))
+        self.stats.log_request(dict(method="GET", name="test_entry", exception=Exception("dummy fail"))
+        log_error_direct(Exception("dummy fail"))
         self.s = self.stats.get("test_entry", "GET")
 
     def test_percentile(self):
@@ -72,20 +73,20 @@ class TestRequestStats(unittest.TestCase):
         for x in range(100):
             s.log(x, 0)
 
-        self.assertEqual(s.get_response_time_percentile(0.5), 50)
-        self.assertEqual(s.get_response_time_percentile(0.6), 60)
-        self.assertEqual(s.get_response_time_percentile(0.95), 95)
+        self.assertEqual(s.ttlb.get_percentile(0.5), 50)
+        self.assertEqual(s.ttlb.get_percentile(0.6), 60)
+        self.assertEqual(s.ttlb.get_percentile(0.95), 95)
 
     def test_median(self):
-        self.assertEqual(self.s.median_response_time, 79)
+        self.assertEqual(self.s.ttlb.median, 79)
 
     def test_median_out_of_min_max_bounds(self):
         s = StatsEntry(self.stats, "median_test", "GET")
         s.log(6034, 0)
-        self.assertEqual(s.median_response_time, 6034)
+        self.assertEqual(s.ttlb.median, 6034)
         s.reset()
         s.log(6099, 0)
-        self.assertEqual(s.median_response_time, 6099)
+        self.assertEqual(s.ttlb.median, 6099)
 
     def test_total_rps(self):
         self.stats.log_request("GET", "other_endpoint", 1337, 1337)
@@ -128,7 +129,7 @@ class TestRequestStats(unittest.TestCase):
         self.assertEqual(self.s.num_failures, 3)
 
     def test_avg(self):
-        self.assertEqual(self.s.avg_response_time, 187.71428571428572)
+        self.assertEqual(self.s.ttlb.avg, 187.71428571428572)
 
     def test_total_content_length(self):
         self.assertEqual(self.s.total_content_length, 9)
@@ -142,8 +143,8 @@ class TestRequestStats(unittest.TestCase):
         self.assertGreater(self.s.total_rps, 2)
         self.assertEqual(self.s.num_requests, 2)
         self.assertEqual(self.s.num_failures, 1)
-        self.assertEqual(self.s.avg_response_time, 420.5)
-        self.assertEqual(self.s.median_response_time, 85)
+        self.assertEqual(self.s.ttlb.avg, 420.5)
+        self.assertEqual(self.s.ttlb.median, 85)
         self.assertNotEqual(None, self.s.last_request_timestamp)
         self.s.reset()
         self.assertEqual(None, self.s.last_request_timestamp)
@@ -151,14 +152,14 @@ class TestRequestStats(unittest.TestCase):
     def test_avg_only_none(self):
         self.s.reset()
         self.s.log(None, 123)
-        self.assertEqual(self.s.avg_response_time, 0)
-        self.assertEqual(self.s.median_response_time, 0)
-        self.assertEqual(self.s.get_response_time_percentile(0.5), 0)
+        self.assertEqual(self.s.ttlb.avg, 0)
+        self.assertEqual(self.s.ttlb.median, 0)
+        self.assertEqual(self.s.ttlb.get_percentile(0.5), 0)
 
     def test_reset_min_response_time(self):
         self.s.reset()
         self.s.log(756, 0)
-        self.assertEqual(756, self.s.min_response_time)
+        self.assertEqual(756, self.s.ttlb.min)
 
     def test_aggregation(self):
         s1 = StatsEntry(self.stats, "aggregate me!", "GET")
@@ -184,8 +185,8 @@ class TestRequestStats(unittest.TestCase):
 
         self.assertEqual(s.num_requests, 10)
         self.assertEqual(s.num_failures, 3)
-        self.assertEqual(s.median_response_time, 38)
-        self.assertEqual(s.avg_response_time, 43.2)
+        self.assertEqual(s.ttlb.median, 38)
+        self.assertEqual(s.ttlb.avg, 43.2)
 
     def test_aggregation_with_rounding(self):
         s1 = StatsEntry(self.stats, "round me!", "GET")
@@ -199,10 +200,10 @@ class TestRequestStats(unittest.TestCase):
         s1.log(977, 0)  # (rounded 980)
 
         self.assertEqual(s1.num_requests, 8)
-        self.assertEqual(s1.median_response_time, 550)
-        self.assertEqual(s1.avg_response_time, 535.75)
-        self.assertEqual(s1.min_response_time, 122)
-        self.assertEqual(s1.max_response_time, 992)
+        self.assertEqual(s1.ttlb.median, 550)
+        self.assertEqual(s1.ttlb.avg, 535.75)
+        self.assertEqual(s1.ttlb.min, 122)
+        self.assertEqual(s1.ttlb.min, 992)
 
     def test_aggregation_with_decimal_rounding(self):
         s1 = StatsEntry(self.stats, "round me!", "GET")
@@ -210,18 +211,18 @@ class TestRequestStats(unittest.TestCase):
         s1.log(1.99, 0)
         s1.log(3.1, 0)
         self.assertEqual(s1.num_requests, 3)
-        self.assertEqual(s1.median_response_time, 2)
-        self.assertEqual(s1.avg_response_time, (1.1 + 1.99 + 3.1) / 3)
-        self.assertEqual(s1.min_response_time, 1.1)
-        self.assertEqual(s1.max_response_time, 3.1)
+        self.assertEqual(s1.ttlb.median, 2)
+        self.assertEqual(s1.ttlb.avg, (1.1 + 1.99 + 3.1) / 3)
+        self.assertEqual(s1.ttlb.min, 1.1)
+        self.assertEqual(s1.ttlb.min, 3.1)
 
-    def test_aggregation_min_response_time(self):
+    def test_aggregation_ttlb.min(self):
         s1 = StatsEntry(self.stats, "min", "GET")
         s1.log(10, 0)
-        self.assertEqual(10, s1.min_response_time)
+        self.assertEqual(10, s1.ttlb.min)
         s2 = StatsEntry(self.stats, "min", "GET")
         s1.extend(s2)
-        self.assertEqual(10, s1.min_response_time)
+        self.assertEqual(10, s1.ttlb.min)
 
     def test_aggregation_last_request_timestamp(self):
         s1 = StatsEntry(self.stats, "r", "GET")
@@ -308,7 +309,7 @@ class TestRequestStats(unittest.TestCase):
         data = Message.unserialize(Message("dummy", s1.serialize(), "none").serialize()).data
         u1 = StatsEntry.unserialize(data)
 
-        self.assertEqual(20, u1.median_response_time)
+        self.assertEqual(20, u1.ttlb.median)
 
 
 class TestStatsPrinting(LocustTestCase):
@@ -502,7 +503,7 @@ class TestCsvStats(LocustTestCase):
 
             server.mocked_send(Message("stats", data, "fake_client"))
             s = master.stats.get("/", "GET")
-            self.assertEqual(700, s.median_response_time)
+            self.assertEqual(700, s.ttlb.median)
 
             gevent.kill(greenlet)
             stats_writer.close_files()
@@ -605,100 +606,100 @@ class TestStatsEntryResponseTimesCache(unittest.TestCase):
         super().setUp(*args, **kwargs)
         self.stats = RequestStats()
 
-    def test_response_times_cached(self):
-        s = StatsEntry(self.stats, "/", "GET", use_response_times_cache=True)
-        self.assertEqual(1, len(s.response_times_cache))
+    def test_data_cached(self):
+        s = StatsEntry(self.stats, "/", "GET", use_data_cache=True)
+        self.assertEqual(1, len(s.ttlb.cache))
         s.log(11, 1337)
-        self.assertEqual(1, len(s.response_times_cache))
+        self.assertEqual(1, len(s.ttlb.cache))
         s.last_request_timestamp -= 1
         s.log(666, 1337)
-        self.assertEqual(2, len(s.response_times_cache))
+        self.assertEqual(2, len(s.ttlb.cache))
         self.assertEqual(
-            CachedResponseTimes(
-                response_times={11: 1},
+            CacheEntry(
+                dist={11: 1},
                 num_requests=1,
             ),
-            s.response_times_cache[int(s.last_request_timestamp) - 1],
+            s.ttlb.cache[int(s.last_request_timestamp) - 1],
         )
 
     def test_response_times_not_cached_if_not_enabled(self):
         s = StatsEntry(self.stats, "/", "GET")
         s.log(11, 1337)
-        self.assertEqual(None, s.response_times_cache)
+        self.assertEqual(None, s.ttlb.cache)
         s.last_request_timestamp -= 1
         s.log(666, 1337)
-        self.assertEqual(None, s.response_times_cache)
+        self.assertEqual(None, s.ttlb.cache)
 
     def test_latest_total_response_times_pruned(self):
         """
         Check that RequestStats.latest_total_response_times are pruned when exceeding 20 entries
         """
-        s = StatsEntry(self.stats, "/", "GET", use_response_times_cache=True)
+        s = StatsEntry(self.stats, "/", "GET", use_data_cache=True)
         t = int(time.time())
         for i in reversed(range(2, 30)):
-            s.response_times_cache[t - i] = CachedResponseTimes(response_times={}, num_requests=0)
-        self.assertEqual(29, len(s.response_times_cache))
+            s.ttlb.cache[t - i] = CacheEntry(dist={}, num_requests=0)
+        self.assertEqual(29, len(s.ttlb.cache))
         s.log(17, 1337)
         s.last_request_timestamp -= 1
         s.log(1, 1)
-        self.assertEqual(20, len(s.response_times_cache))
+        self.assertEqual(20, len(s.ttlb.cache))
         self.assertEqual(
-            CachedResponseTimes(response_times={17: 1}, num_requests=1),
-            s.response_times_cache.popitem(last=True)[1],
+            CacheEntry(dist={17: 1}, num_requests=1),
+            s.ttlb.cache.popitem(last=True)[1],
         )
 
     def test_get_current_response_time_percentile(self):
-        s = StatsEntry(self.stats, "/", "GET", use_response_times_cache=True)
+        s = StatsEntry(self.stats, "/", "GET", use_data_cache=True)
         t = int(time.time())
-        s.response_times_cache[t - 10] = CachedResponseTimes(
-            response_times={i: 1 for i in range(100)}, num_requests=200
+        s.ttlb.cache[t - 10] = CacheEntry(
+            dist={i: 1 for i in range(100)}, num_requests=200
         )
-        s.response_times_cache[t - 10].response_times[1] = 201
+        s.ttlb.cache[t - 10].ttlb.dist[1] = 201
 
-        s.response_times = {i: 2 for i in range(100)}
-        s.response_times[1] = 202
+        s.ttlb.dist = {i: 2 for i in range(100)}
+        s.ttlb.dist[1] = 202
         s.num_requests = 300
 
-        self.assertEqual(95, s.get_current_response_time_percentile(0.95))
+        self.assertEqual(95, s.ttlb.get_current_percentile(0.95))
 
     def test_get_current_response_time_percentile_outside_cache_window(self):
-        s = StatsEntry(self.stats, "/", "GET", use_response_times_cache=True)
+        s = StatsEntry(self.stats, "/", "GET", use_data_cache=True)
         # an empty response times cache, current time will not be in this cache
-        s.response_times_cache = {}
-        self.assertEqual(None, s.get_current_response_time_percentile(0.95))
+        s.ttlb.cache = {}
+        self.assertEqual(None, s.ttlb.get_current_percentile(0.95))
 
     def test_diff_response_times_dicts(self):
         self.assertEqual(
             {1: 5, 6: 8},
-            diff_response_time_dicts(
+            diff_entry_dicts(
                 {1: 6, 6: 16, 2: 2},
                 {1: 1, 6: 8, 2: 2},
             ),
         )
         self.assertEqual(
             {},
-            diff_response_time_dicts(
+            diff_entry_dicts(
                 {},
                 {},
             ),
         )
         self.assertEqual(
             {10: 15},
-            diff_response_time_dicts(
+            diff_entry_dicts(
                 {10: 15},
                 {},
             ),
         )
         self.assertEqual(
             {10: 10},
-            diff_response_time_dicts(
+            diff_entry_dicts(
                 {10: 10},
                 {},
             ),
         )
         self.assertEqual(
             {},
-            diff_response_time_dicts(
+            diff_entry_dicts(
                 {1: 1},
                 {1: 1},
             ),

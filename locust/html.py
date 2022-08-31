@@ -9,7 +9,6 @@ from html import escape
 from json import dumps
 from .runners import MasterRunner, STATE_STOPPED, STATE_STOPPING
 
-
 def render_template(file, **kwargs):
     templates_path = os.path.join(pathlib.Path(__file__).parent.absolute(), "templates")
     env = Environment(loader=FileSystemLoader(templates_path), extensions=["jinja2.ext.do"])

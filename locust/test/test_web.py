@@ -113,11 +113,11 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
         self.assertEqual("/<html>", data["stats"][0]["name"])
         self.assertEqual("/&lt;html&gt;", data["stats"][0]["safe_name"])
         self.assertEqual("GET", data["stats"][0]["method"])
-        self.assertEqual(120, data["stats"][0]["avg_response_time"])
+        self.assertEqual(120, data["stats"][0]["ttlb"]["avg"])
 
         self.assertEqual("Aggregated", data["stats"][1]["name"])
         self.assertEqual(1, data["stats"][1]["num_requests"])
-        self.assertEqual(120, data["stats"][1]["avg_response_time"])
+        self.assertEqual(120, data["stats"][1]["ttlb"]["avg"])
 
     def test_stats_cache(self):
         self.stats.log_request("GET", "/test", 120, 5612)
@@ -143,8 +143,8 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
         self.assertEqual(200, response.status_code)
 
         data = json.loads(response.text)
-        self.assertEqual(1, data["stats"][0]["min_response_time"])
-        self.assertEqual(1000, data["stats"][0]["max_response_time"])
+        self.assertEqual(1, data["stats"][0]["ttlb"]["min"])
+        self.assertEqual(1000, data["stats"][0]["ttlb"]["max"])
 
     def test_request_stats_csv(self):
         self.stats.log_request("GET", "/test2", 120, 5612)

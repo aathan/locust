@@ -23,7 +23,6 @@ from .shape import LoadTestShape
 
 RunnerType = TypeVar("RunnerType", bound=Runner)
 
-
 class Environment:
     def __init__(
         self,
@@ -143,9 +142,9 @@ class Environment:
         :param master_host: Host/IP of a running master node
         :param master_port: Port on master node to connect to
         """
-        # Create a new RequestStats with use_response_times_cache set to False to save some memory
-        # and CPU cycles, since the response_times_cache is not needed for Worker nodes
-        self.stats = RequestStats(use_response_times_cache=False)
+        # Create a new RequestStats with use_data_cache set to False to save some memory
+        # and CPU cycles, since the data_cache is not needed for Worker nodes
+        self.stats = RequestStats(use_data_cache=False)
         return self._create_runner(
             WorkerRunner,
             master_host=master_host,

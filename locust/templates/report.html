@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Test Report for {{ escape(str(locustfile)) }}</title>
-    <link rel="shortcut icon" href="../static/img/favicon.ico" type="image/x-icon"/>
+    <link rel="shortcut icon" href="../static/img/favicon.ico" type="image/x-icon" />
     <style>
         body {
             background: #173529;
         }
+
         .container {
             width: 1000px;
             margin: 0 auto;
@@ -33,19 +35,25 @@
         .download a {
             color: #00ca5a;
         }
-        
-        {{ static_css|safe }}
+
+            {
+                {
+                static_css|safe
+            }
+        }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>Locust Test Report</h1>
 
         <div class="info">
             {% if show_download_link %}
-                <p class="download"><a href="?download=1">Download the Report</a></p>
+            <p class="download"><a href="?download=1">Download the Report</a></p>
             {% endif %}
-            <p>During: <span class="l10n datetime">{{ start_time }}</span> - <span class="l10n datetime">{{ end_time }}</span></p>
+            <p>During: <span class="l10n datetime">{{ start_time }}</span> - <span class="l10n datetime">{{ end_time
+                    }}</span></p>
             <p>Target Host: <span>{{ escape(str(host)) }}</span></p>
             <p>Script: <span>{{ escape(str(locustfile)) }}</span></p>
         </div>
@@ -69,19 +77,19 @@
                 </thead>
                 <tbody>
                     {% for s in requests_statistics %}
-                        <tr{% if loop.last %} class="total"{% endif %}>
-                            <td>{{ escape(s.method or "") }}</td>
-                            <td>{{ escape(s.name) }}</td>
-                            <td>{{ int(s.num_requests) }}</td>
-                            <td>{{ int(s.num_failures) }}</td>
-                            <td>{{ int(s.avg_response_time) }}</td>
-                            <td>{{ int(s.min_response_time or 0) }}</td>
-                            <td>{{ int(s.max_response_time) }}</td>
-                            <td>{{ int(s.avg_content_length) }}</td>
-                            <td>{{ round(s.total_rps, 1) }}</td>
-                            <td>{{ round(s.total_fail_per_sec, 1) }}</td>
+                    <tr{% if loop.last %} class="total" {% endif %}>
+                        <td>{{ escape(s.method or "") }}</td>
+                        <td>{{ escape(s.name) }}</td>
+                        <td>{{ int(s.num_requests) }}</td>
+                        <td>{{ int(s.num_failures) }}</td>
+                        <td>{{ int(s.avg_ttlb) }}</td>
+                        <td>{{ int(s.min_ttlb or 0) }}</td>
+                        <td>{{ int(s.max_ttlb) }}</td>
+                        <td>{{ int(s.avg_content_length) }}</td>
+                        <td>{{ round(s.total_rps, 1) }}</td>
+                        <td>{{ round(s.total_fail_per_sec, 1) }}</td>
                         </tr>
-                    {% endfor %}
+                        {% endfor %}
                 </tbody>
             </table>
         </div>
@@ -105,79 +113,79 @@
                 </thead>
                 <tbody>
                     {% for s in requests_statistics %}
-                        <tr{% if loop.last %} class="total"{% endif %}>
-                            <td>{{ escape(s.method or "") }}</td>
-                            <td>{{ escape(s.name) }}</td>
-                            <td>{{ int(s.get_response_time_percentile(0.5)) }}</td>
-                            <td>{{ int(s.get_response_time_percentile(0.6)) }}</td>
-                            <td>{{ int(s.get_response_time_percentile(0.7)) }}</td>
-                            <td>{{ int(s.get_response_time_percentile(0.8)) }}</td>
-                            <td>{{ int(s.get_response_time_percentile(0.9)) }}</td>
-                            <td>{{ int(s.get_response_time_percentile(0.95)) }}</td>
-                            <td>{{ int(s.get_response_time_percentile(0.99)) }}</td>
-                            <td>{{ int(s.get_response_time_percentile(1)) }}</td>
+                    <tr{% if loop.last %} class="total" {% endif %}>
+                        <td>{{ escape(s.method or "") }}</td>
+                        <td>{{ escape(s.name) }}</td>
+                        <td>{{ int(s.ttlb.get_percentile(0.5)) }}</td>
+                        <td>{{ int(s.ttlb.get_percentile(0.6)) }}</td>
+                        <td>{{ int(s.ttlb.get_percentile(0.7)) }}</td>
+                        <td>{{ int(s.ttlb.get_percentile(0.8)) }}</td>
+                        <td>{{ int(s.ttlb.get_percentile(0.9)) }}</td>
+                        <td>{{ int(s.ttlb.get_percentile(0.95)) }}</td>
+                        <td>{{ int(s.ttlb.get_percentile(0.99)) }}</td>
+                        <td>{{ int(s.ttlb.get_percentile(1)) }}</td>
                         </tr>
-                    {% endfor %}
+                        {% endfor %}
                 </tbody>
             </table>
         </div>
 
         {% if failures_statistics %}
-            <div class="failures">
-                <h2>Failures Statistics</h2>
-                <table class="stats">
-                    <thead>
-                        <tr>
-                            <th class="sortable">Method</th>
-                            <th class="sortable">Name</th>
-                            <th class="sortable">Error</th>
-                            <th class="sortable">Occurrences</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for s in failures_statistics %}
-                            <tr>
-                                <td>{{ escape(s.method or "") }}</td>
-                                <td>{{ escape(s.name) }}</td>
-                                <td>{{ escape(str(s.error)) }}</td>
-                                <td>{{ s.occurrences }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+        <div class="failures">
+            <h2>Failures Statistics</h2>
+            <table class="stats">
+                <thead>
+                    <tr>
+                        <th class="sortable">Method</th>
+                        <th class="sortable">Name</th>
+                        <th class="sortable">Error</th>
+                        <th class="sortable">Occurrences</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in failures_statistics %}
+                    <tr>
+                        <td>{{ escape(s.method or "") }}</td>
+                        <td>{{ escape(s.name) }}</td>
+                        <td>{{ escape(str(s.error)) }}</td>
+                        <td>{{ s.occurrences }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% endif %}
 
         {% if exceptions_statistics %}
-            <div class="exceptions">
-                <h2>Exceptions Statistics</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th class="sortable">Count</th>
-                            <th class="sortable">Message</th>
-                            <th class="sortable">Traceback</th>
-                            <th class="sortable">Nodes</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for s in exceptions_statistics %}
-                            <tr>
-                                <td>{{ s.count }}</td>
-                                <td>{{ escape(s.msg) }}</td>
-                                <td>{{ escape(s.traceback) }}</td>
-                                <td>{{ escape(s.nodes) }}</td>
-                            </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+        <div class="exceptions">
+            <h2>Exceptions Statistics</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th class="sortable">Count</th>
+                        <th class="sortable">Message</th>
+                        <th class="sortable">Traceback</th>
+                        <th class="sortable">Nodes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in exceptions_statistics %}
+                    <tr>
+                        <td>{{ s.count }}</td>
+                        <td>{{ escape(s.msg) }}</td>
+                        <td>{{ escape(s.traceback) }}</td>
+                        <td>{{ escape(s.nodes) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% endif %}
 
         {% if history %}
-            <div class="charts-container">
-                <h2>Charts</h2>
-            </div>
+        <div class="charts-container">
+            <h2>Charts</h2>
+        </div>
         {% endif %}
 
         <div id="tasks">
@@ -187,35 +195,50 @@
 
     </div>
 
-    {# <script type="text/javascript" src="/static/jquery-1.11.3.min.js"></script> #}
-    {# <script type="text/javascript" src="/static/echarts.common.min.js"></script> #}
-    {# <script type="text/javascript" src="/static/vintage.js"></script> #}
-    {# <script type="text/javascript" src="/static/chart.js"></script> #}
-    {# <script type="text/javascript" src="./static/tasks.js"></script> #}
+    {#
+    <script type="text/javascript" src="/static/jquery-1.11.3.min.js"></script> #}
+    {#
+    <script type="text/javascript" src="/static/echarts.common.min.js"></script> #}
+    {#
+    <script type="text/javascript" src="/static/vintage.js"></script> #}
+    {#
+    <script type="text/javascript" src="/static/chart.js"></script> #}
+    {#
+    <script type="text/javascript" src="./static/tasks.js"></script> #}
     <script>
-        {{ static_js|safe }}
+        { { static_js | safe } }
     </script>
 
     <script>
         {% include 'stats_data.html' %}
         var rpsChart = new LocustLineChart($(".charts-container"), "Total Requests per Second", ["RPS", "Failures/s"], "reqs/s", ['#00ca5a', '#ff6d6d']);
-        var responseTimeChart = new LocustLineChart($(".charts-container"), "Response Times (ms)", ["Median Response Time", "95% percentile"], "ms");
+        var ttlbChart = new LocustLineChart($(".charts-container"), "Time to last byte (ms)", ["Median TTLB", "95% TTLB"], "ms");
+        var ttfbChart = new LocustLineChart($(".charts-container"), "Time to first byte (ms)", ["Median TTFB", "95% TTFB"], "ms");
         var usersChart = new LocustLineChart($(".charts-container"), "Number of Users", ["Users"], "users");
 
-        if(stats_history["time"].length > 0){
+        window.alert("hi")
+        if (stats_history["time"].length > 0) {
             rpsChart.chart.setOption({
-                xAxis: {data: stats_history["time"]},
+                xAxis: { data: stats_history["time"] },
                 series: [
-                    {data: stats_history["current_rps"]},
-                    {data: stats_history["current_fail_per_sec"]},
+                    { data: stats_history["current_rps"] },
+                    { data: stats_history["current_fail_per_sec"] },
                 ]
             });
 
-            responseTimeChart.chart.setOption({
-                xAxis: {data: stats_history["time"]},
+            ttlbChart.chart.setOption({
+                xAxis: { data: stats_history["time"] },
                 series: [
-                    {data: stats_history["response_time_percentile_50"]},
-                    {data: stats_history["response_time_percentile_95"]},
+                    { data: stats_history["ttlb_percentile_50"] },
+                    { data: stats_history["ttlb_percentile_95"] },
+                ]
+            });
+
+            ttfbChart.chart.setOption({
+                xAxis: { data: stats_history["time"] },
+                series: [
+                    { data: stats_history["ttfb_percentile_50"] },
+                    { data: stats_history["ttfb_percentile_95"] },
                 ]
             });
 
@@ -224,7 +247,7 @@
                     data: stats_history["time"]
                 },
                 series: [
-                    {data: stats_history["user_count"]},
+                    { data: stats_history["user_count"] },
                 ]
             });
         }
@@ -241,18 +264,18 @@
     </script>
 
     <script>
-        $('.sortable').click(function() {
+        $('.sortable').click(function () {
             var table = $(this).parents('table').eq(0)
             var rowArray = table.find('tr:gt(0)').toArray()
             var aggregatedRow = rowArray.pop()
             var rows = rowArray.sort(comparer($(this).index()))
             this.asc = !this.asc
-            if (!this.asc){rows = rows.reverse()}
-            for (var i = 0; i < rows.length; i++){table.append(rows[i])}
+            if (!this.asc) { rows = rows.reverse() }
+            for (var i = 0; i < rows.length; i++) { table.append(rows[i]) }
             table.append(aggregatedRow)
         })
         function comparer(index) {
-            return function(a,b) {
+            return function (a, b) {
                 var valA = getCellValue(a, index), valB = getCellValue(b, index)
                 return $.isNumeric(valA) && $.isNumeric(valB) ? valA - valB : valA.toString().localeCompare(valB)
             }
@@ -260,4 +283,5 @@
         function getCellValue(row, index) { return $(row).children('td').eq(index).text() }
     </script>
 </body>
+
 </html>

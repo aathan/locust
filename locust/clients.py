@@ -132,7 +132,9 @@ class HttpSession(requests.Session):
         start_time = time.time()
         start_perf_counter = time.perf_counter()
         response = self._send_request_safe_mode(method, url, **kwargs)
-        response_time = (time.perf_counter() - start_perf_counter) * 1000
+        now = time.perf_counter()
+        ttlb = (now - start_perf_counter) * 1000
+        ttfb = response.elapsed.total_seconds() * 1000
 
         request_after_redirect = (response.history and response.history[0] or response).request
         url_after_redirect = request_after_redirect.path_url
@@ -143,7 +145,8 @@ class HttpSession(requests.Session):
         # store meta data that is used when reporting the request to locust's statistics
         request_meta = {
             "request_type": method,
-            "response_time": response_time,
+            "ttlb": ttlb,
+            "ttfb": ttfb,
             "name": name or url_after_redirect,
             "context": context,
             "response": response,

@@ -1,8 +1,8 @@
 var newTestLink = $("#new-test");
 var editTestLink = $("#edit-test");
 
-$(window).ready(function() {
-    if($("#user_count").length > 0) {
+$(window).ready(function () {
+    if ($("#user_count").length > 0) {
         $("#user_count").focus().select();
     }
 });
@@ -14,7 +14,7 @@ function appearStopped() {
     $(".user_count").hide();
 }
 
-$("#box_stop a.stop-button").click(function(event) {
+$("#box_stop a.stop-button").click(function (event) {
     event.preventDefault();
     $.get($(this).attr("href")).done(() => {
         markerFlags.stop = true;
@@ -23,24 +23,24 @@ $("#box_stop a.stop-button").click(function(event) {
     appearStopped();
 });
 
-$("#box_stop a.reset-button").click(function(event) {
+$("#box_stop a.reset-button").click(function (event) {
     event.preventDefault();
     $.get($(this).attr("href"));
 });
 
-newTestLink.click(function(event) {
+newTestLink.click(function (event) {
     event.preventDefault();
     $("#start").show();
     $("#user_count").focus().select();
 });
 
-editTestLink.click(function(event) {
+editTestLink.click(function (event) {
     event.preventDefault();
     $("#edit").show();
     $("#new_user_count").focus().select();
 });
 
-$(".close_link").click(function(event) {
+$(".close_link").click(function (event) {
     event.preventDefault();
     $(this).parent().parent().hide();
 });
@@ -81,7 +81,7 @@ function setHostName(hostname) {
     $('#host_url').text(hostname);
 }
 
-$('#swarm_form').submit(function(event) {
+$('#swarm_form').submit(function (event) {
     event.preventDefault();
     $("body").attr("class", "spawning");
     $("#start").hide();
@@ -91,7 +91,7 @@ $('#swarm_form').submit(function(event) {
     editTestLink.show();
     $(".user_count").show();
     $.post($(this).attr("action"), $(this).serialize(),
-        function(response) {
+        function (response) {
             if (response.success) {
                 setHostName(response.host);
 
@@ -104,10 +104,10 @@ $('#swarm_form').submit(function(event) {
     );
 });
 
-$('#edit_form').submit(function(event) {
+$('#edit_form').submit(function (event) {
     event.preventDefault();
     $.post($(this).attr("action"), $(this).serialize(),
-        function(response) {
+        function (response) {
             if (response.success) {
                 $("body").attr("class", "spawning");
                 $("#edit").fadeOut();
@@ -117,18 +117,18 @@ $('#edit_form').submit(function(event) {
     );
 });
 
-var sortBy = function(field, reverse, primer){
+var sortBy = function (field, reverse, primer) {
     reverse = (reverse) ? -1 : 1;
-    return function(a,b){
+    return function (a, b) {
         a = a[field];
         b = b[field];
-       if (typeof(primer) != 'undefined'){
-           a = primer(a);
-           b = primer(b);
-       }
-       if (a<b) return reverse * -1;
-       if (a>b) return reverse * 1;
-       return 0;
+        if (typeof (primer) != 'undefined') {
+            a = primer(a);
+            b = primer(b);
+        }
+        if (a < b) return reverse * -1;
+        if (a > b) return reverse * 1;
+        return 0;
     }
 }
 
@@ -156,8 +156,8 @@ function renderTable(report) {
     window.alternate = false;
     $('#errors tbody').jqoteapp(errors_tpl, (report.errors).sort(sortBy(failuresSortAttribute, failuresDesc)));
 
-    $("#total_rps").html(Math.round(report.total_rps*100)/100);
-    $("#fail_ratio").html(Math.round(report.fail_ratio*100));
+    $("#total_rps").html(Math.round(report.total_rps * 100) / 100);
+    $("#fail_ratio").html(Math.round(report.fail_ratio * 100));
     $("#status_text").html(report.state);
     $("#userCount").html(report.user_count);
 }
@@ -173,21 +173,21 @@ function renderWorkerTable(report) {
 }
 
 
-$("#stats .stats_label").click(function(event) {
+$("#stats .stats_label").click(function (event) {
     event.preventDefault();
     sortAttribute = $(this).attr("data-sortkey");
     desc = !desc;
     renderTable(window.report);
 });
 
-$("#errors .stats_label").click(function(event) {
+$("#errors .stats_label").click(function (event) {
     event.preventDefault();
     failuresSortAttribute = $(this).attr("data-sortkey");
     failuresDesc = !failuresDesc;
     renderTable(window.report);
 });
 
-$("#workers .stats_label").click(function(event) {
+$("#workers .stats_label").click(function (event) {
     event.preventDefault();
     workerSortAttribute = $(this).attr("data-sortkey");
     workerDesc = !workerDesc;
@@ -200,33 +200,41 @@ function createMarkLine() {
         label: {
             formatter: params => `Run #${params.dataIndex + 1}`
         },
-        lineStyle: {color: "#5b6f66"},
+        lineStyle: { color: "#5b6f66" },
         data: stats_history["markers"],
     }
 }
 
-function update_stats_charts(){
-    if(stats_history["time"].length > 0){
+function update_stats_charts() {
+    if (stats_history["time"].length > 0) {
         rpsChart.chart.setOption({
-            xAxis: {data: stats_history["time"]},
+            xAxis: { data: stats_history["time"] },
             series: [
-                {data: stats_history["current_rps"], markLine: createMarkLine()},
-                {data: stats_history["current_fail_per_sec"]},
+                { data: stats_history["current_rps"], markLine: createMarkLine() },
+                { data: stats_history["current_fail_per_sec"] },
             ]
         });
 
-        responseTimeChart.chart.setOption({
-            xAxis: {data: stats_history["time"]},
+        ttlbChart.chart.setOption({
+            xAxis: { data: stats_history["time"] },
             series: [
-                {data: stats_history["response_time_percentile_50"], markLine: createMarkLine()},
-                {data: stats_history["response_time_percentile_95"]},
+                { data: stats_history["ttlb_percentile_50"], markLine: createMarkLine() },
+                { data: stats_history["ttlb_percentile_95"] },
+            ]
+        });
+
+        ttfbChart.chart.setOption({
+            xAxis: { data: stats_history["time"] },
+            series: [
+                { data: stats_history["ttfb_percentile_50"], markLine: createMarkLine() },
+                { data: stats_history["ttfb_percentile_95"] },
             ]
         });
 
         usersChart.chart.setOption({
-            xAxis: {data: stats_history["time"]},
+            xAxis: { data: stats_history["time"] },
             series: [
-                {data: stats_history["user_count"], markLine: createMarkLine()},
+                { data: stats_history["user_count"], markLine: createMarkLine() },
             ]
         });
     }
@@ -234,10 +242,11 @@ function update_stats_charts(){
 
 // init charts
 var rpsChart = new LocustLineChart($(".charts-container"), "Total Requests per Second", ["RPS", "Failures/s"], "reqs/s", ['#00ca5a', '#ff6d6d']);
-var responseTimeChart = new LocustLineChart($(".charts-container"), "Response Times (ms)", ["Median Response Time", "95% percentile"], "ms");
+var ttlbChart = new LocustLineChart($(".charts-container"), "Time to last byte (ms)", ["Median TTLB Time", "95% TTLB"], "ms");
+var ttfbChart = new LocustLineChart($(".charts-container"), "Time to first byte (ms)", ["Median TTFB Time", "95% TTFB"], "ms");
 var usersChart = new LocustLineChart($(".charts-container"), "Number of Users", ["Users"], "users");
-charts.push(rpsChart, responseTimeChart, usersChart);
-echarts.connect([rpsChart.chart,responseTimeChart.chart,usersChart.chart])
+charts.push(rpsChart, ttlbChart, ttfbChart, usersChart);
+echarts.connect([rpsChart.chart, ttlbChart.chart, ttfbChart.chart, usersChart.chart])
 update_stats_charts()
 
 const markerFlags = {
@@ -248,7 +257,7 @@ const markerFlags = {
 function updateStats() {
     $.get('./stats/requests', function (report) {
         window.report = report;
-        try{
+        try {
             renderTable(report);
             renderWorkerTable(report);
 
@@ -257,14 +266,16 @@ function updateStats() {
             if (report.state === "stopped") {
                 if (markerFlags.stop) {
                     markerFlags.stop = false;
-    
+
                     // placeholders to show a skip in the lines between test runs
                     stats_history["time"].push(time);
-                    stats_history["user_count"].push({"value": null});
-                    stats_history["current_rps"].push({"value": null});
-                    stats_history["current_fail_per_sec"].push({"value": null});
-                    stats_history["response_time_percentile_50"].push({"value": null});
-                    stats_history["response_time_percentile_95"].push({"value": null});
+                    stats_history["user_count"].push({ "value": null });
+                    stats_history["current_rps"].push({ "value": null });
+                    stats_history["current_fail_per_sec"].push({ "value": null });
+                    stats_history["ttlb_percentile_50"].push({ "value": null });
+                    stats_history["ttlb_percentile_95"].push({ "value": null });
+                    stats_history["ttfb_percentile_50"].push({ "value": null });
+                    stats_history["ttfb_percentile_95"].push({ "value": null });
                 }
 
                 // update stats chart to ensure the stop spacing appears as part 
@@ -281,14 +292,14 @@ function updateStats() {
 
                 // mark the first run when we start the second run
                 if (stats_history["markers"].length === 0) {
-                    stats_history["markers"].push({xAxis: stats_history["time"][0]});
+                    stats_history["markers"].push({ xAxis: stats_history["time"][0] });
                 }
 
-                stats_history["markers"].push({xAxis: time});
+                stats_history["markers"].push({ xAxis: time });
             }
 
             // get total stats row
-            var total = report.stats[report.stats.length-1];
+            var total = report.stats[report.stats.length - 1];
 
             // ignore stats without requests
             if (total.num_requests < 1) {
@@ -297,17 +308,19 @@ function updateStats() {
 
             // update charts
             stats_history["time"].push(time);
-            stats_history["user_count"].push({"value": report.user_count});
-            stats_history["current_rps"].push({"value": total.current_rps, "users": report.user_count});
-            stats_history["current_fail_per_sec"].push({"value": total.current_fail_per_sec, "users": report.user_count});
-            stats_history["response_time_percentile_50"].push({"value": report.current_response_time_percentile_50, "users": report.user_count});
-            stats_history["response_time_percentile_95"].push({"value": report.current_response_time_percentile_95, "users": report.user_count});
+            stats_history["user_count"].push({ "value": report.user_count });
+            stats_history["current_rps"].push({ "value": total.current_rps, "users": report.user_count });
+            stats_history["current_fail_per_sec"].push({ "value": total.current_fail_per_sec, "users": report.user_count });
+            stats_history["ttlb_percentile_50"].push({ "value": report.current_ttlb_percentile_50, "users": report.user_count });
+            stats_history["ttlb_percentile_95"].push({ "value": report.current_ttlb_percentile_95, "users": report.user_count });
+            stats_history["ttfb_percentile_50"].push({ "value": report.current_ttfb_percentile_50, "users": report.user_count });
+            stats_history["ttfb_percentile_95"].push({ "value": report.current_ttfb_percentile_95, "users": report.user_count });
             update_stats_charts();
 
-        } catch(i){
+        } catch (i) {
             console.debug(i);
         }
-    }).always(function() {
+    }).always(function () {
         setTimeout(updateStats, 2000);
     });
 }

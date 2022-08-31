@@ -137,19 +137,7 @@ class Runner:
         self._users_dispatcher: Optional[UsersDispatcher] = None
 
         # set up event listeners for recording requests
-        def on_request_success(request_type, name, response_time, response_length, **_kwargs):
-            self.stats.log_request(request_type, name, response_time, response_length)
-
-        def on_request_failure(request_type, name, response_time, response_length, exception, **_kwargs):
-            self.stats.log_request(request_type, name, response_time, response_length)
-            self.stats.log_error(request_type, name, exception)
-
-        # temporarily set log level to ignore warnings to suppress deprecation message
-        loglevel = logging.getLogger().level
-        logging.getLogger().setLevel(logging.ERROR)
-        self.environment.events.request_success.add_listener(on_request_success)
-        self.environment.events.request_failure.add_listener(on_request_failure)
-        logging.getLogger().setLevel(loglevel)
+        self.environment.events.request.add_listener(self.stats.log_request)
 
         self.connection_broken = False
         self.final_user_classes_count: Dict[str, int] = {}  # just for the ratio report, fills before runner stops

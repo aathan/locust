@@ -47,7 +47,7 @@ class GrpcClient:
                 request_meta["response_length"] = len(request_meta["response"].message)
             except grpc.RpcError as e:
                 request_meta["exception"] = e
-            request_meta["response_time"] = (time.perf_counter() - start_perf_counter) * 1000
+            request_meta["ttlb"] = (time.perf_counter() - start_perf_counter) * 1000
             self.env.events.request.fire(**request_meta)
             return request_meta["response"]
 

@@ -43,7 +43,7 @@ class EventHook:
                 # in which case they are entirely appropriate and should not be caught
                 raise
             except Exception:
-                logging.error("Uncaught exception in event handler: \n%s", traceback.format_exc())
+                logging.error("Uncaught exception in event handler: \n%s", traceback.format_exc(),stack_info=True)
                 log.unhandled_greenlet_exception = True
 
 
@@ -66,7 +66,8 @@ class Events:
 
     :param request_type: Request type method used
     :param name: Path to the URL that was called (or override name if it was used in the call to the client)
-    :param response_time: Time in milliseconds until exception was thrown
+    :param ttlb: Time to last byte (ms)
+    :param ttfb: Time to first byte (ms)
     :param response_length: Content-length of the response
     :param response: Response object (e.g. a :py:class:`requests.Response`)
     :param context: :ref:`User/request context <request_context>`
@@ -82,7 +83,7 @@ class Events:
 
     :param request_type: Request type method used
     :param name: Path to the URL that was called (or override name if it was used in the call to the client)
-    :param response_time: Response time in milliseconds
+    :param response_time: Time to last byte (ms)
     :param response_length: Content-length of the response
     """
 
@@ -95,7 +96,7 @@ class Events:
 
     :param request_type: Request type method used
     :param name: Path to the URL that was called (or override name if it was used in the call to the client)
-    :param response_time: Time in milliseconds until exception was thrown
+    :param response_time: Time to exception (ms)
     :param response_length: Content-length of the response
     :param exception: Exception instance that was thrown
     """
@@ -226,14 +227,14 @@ class Events:
 
         self.request_failure = DeprecatedEventHook("request_failure event deprecated. Use the request event.")
 
-        def fire_deprecated_request_handlers(
-            request_type, name, response_time, response_length, exception, context, **kwargs
+        def fire_deprecated_request_handlers(*,
+            request_type, name, ttlb, response_length, exception, context, **kwargs
         ):
             if exception:
                 self.request_failure.fire(
                     request_type=request_type,
                     name=name,
-                    response_time=response_time,
+                    response_time=ttlb,
                     response_length=response_length,
                     exception=exception,
                 )
@@ -241,7 +242,7 @@ class Events:
                 self.request_success.fire(
                     request_type=request_type,
                     name=name,
-                    response_time=response_time,
+                    response_time=ttlb,
                     response_length=response_length,
                 )
 

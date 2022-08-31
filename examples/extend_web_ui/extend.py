@@ -116,7 +116,7 @@ def locust_init(environment, **kwargs):
 
 
 @events.request.add_listener
-def on_request(request_type, name, response_time, response_length, exception, context, **kwargs):
+def on_request(*, name, response_length, **kwargs):
     """
     Event handler that get triggered on every request
     """

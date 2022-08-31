@@ -41,9 +41,11 @@ class PrintListener:
 
     def on_request(
         self,
+        *,
         request_type,
         name,
-        response_time,
+        ttlb,
+        ttfb,
         response_length,
         exception,
         context: dict,
@@ -65,8 +67,10 @@ class PrintListener:
         else:
             errortext = ""
 
-        if response_time is None:
-            response_time = -1
+        if ttlb is None:
+            ttlb = -1
+        if ttfb is None:
+            ttfb = -1
         n = name.ljust(30) if name else ""
 
         if self.include_time:
@@ -77,7 +81,8 @@ class PrintListener:
 
         _print_t(request_type)
         _print_t(n.ljust(50))
-        _print_t(str(round(response_time)).ljust(7))
+        _print_t(str(round(ttlb)).ljust(7))
+        _print_t(str(round(ttfb)).ljust(7))
 
         if self.include_length:
             _print_t(response_length)

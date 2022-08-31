@@ -109,8 +109,7 @@ The list of statistics parameters that can be modified is:
 +-------------------------------------------+--------------------------------------------------------------------------------------+
 | CONSOLE_STATS_INTERVAL_SEC                | Interval for how frequently results are written to console                           |
 +-------------------------------------------+--------------------------------------------------------------------------------------+
-| CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW   | Window size/resolution - in seconds - when calculating the current response          |
-|                                           | time percentile                                                                      |
+| CURRENT_PERCENTILE_WINDOW                 | Window size/resolution - in seconds - when calculating the current stats percentile  |
 +-------------------------------------------+--------------------------------------------------------------------------------------+
 | PERCENTILES_TO_REPORT                     | The list of response time percentiles to be calculated & reported                    |
 +-------------------------------------------+--------------------------------------------------------------------------------------+

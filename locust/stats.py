@@ -1,9 +1,10 @@
 from abc import abstractmethod
+from ast import Pass
 import datetime
 import hashlib
 from tempfile import NamedTemporaryFile
 import time
-from collections import namedtuple, OrderedDict
+from collections import namedtuple, OrderedDict, defaultdict
 from copy import copy
 from itertools import chain
 import os
@@ -29,9 +30,9 @@ from typing import (
 
 # @TODO: typing.Protocol is in python >= 3.8
 try:
-    from typing import Protocol, TypedDict
+    from typing import Protocol, TypedDict, DefaultDict, Generic, TypeVar
 except ImportError:
-    from typing_extensions import Protocol, TypedDict  # type: ignore
+    from typing_extensions import Protocol, TypedDict, DefaultDict, Generic, TypeVar  # type: ignore
 
 from types import FrameType
 
@@ -62,9 +63,16 @@ class CSVWriter(Protocol):
 
 
 class StatsBaseDict(TypedDict):
-    name: str
-    method: str
+    key: Tuple[str,str]
 
+EntryDictType = Dict[int,int]
+DistDictType = Dict[int,int]
+
+class MinMaxTotalDict(TypedDict):
+    min: Optional[float]
+    max: float
+    total: float
+    all: EntryDictType
 
 class StatsEntryDict(StatsBaseDict):
     last_request_timestamp: Optional[float]
@@ -72,11 +80,9 @@ class StatsEntryDict(StatsBaseDict):
     num_requests: int
     num_none_requests: int
     num_failures: int
-    total_response_time: int
-    max_response_time: int
-    min_response_time: Optional[int]
+    ttlb: MinMaxTotalDict
+    ttfb: MinMaxTotalDict
     total_content_length: int
-    response_times: Dict[int, int]
     num_reqs_per_sec: Dict[int, int]
     num_fail_per_sec: Dict[int, int]
 
@@ -125,10 +131,8 @@ CSV_STATS_FLUSH_INTERVAL_SEC = 10
 Default window size/resolution - in seconds - when calculating the current
 response time percentile
 """
-CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW = 10
+CURRENT_PERCENTILE_WINDOW = 10
 
-
-CachedResponseTimes = namedtuple("CachedResponseTimes", ["response_times", "num_requests"])
 
 PERCENTILES_TO_REPORT = [0.50, 0.66, 0.75, 0.80, 0.90, 0.95, 0.98, 0.99, 0.999, 0.9999, 1.0]
 
@@ -149,32 +153,32 @@ def get_readable_percentiles(percentile_list: List[float]) -> List[str]:
     ]
 
 
-def calculate_response_time_percentile(response_times: Dict[int, int], num_requests: int, percent: float) -> int:
+def calculate_percentile(source_data: Dict[int, float], length: int, percent: float) -> int:
     """
     Get the response time that a certain number of percent of the requests
     finished within. Arguments:
 
-    response_times: A StatsEntry.response_times dict
-    num_requests: Number of request made (could be derived from response_times,
+    source_data: An EntryDict dict containing data to be analyzed
+    num_requests: Number of request made (could be derived from source_data,
                   but we save some CPU cycles by using the value which we already store)
     percent: The percentile we want to calculate. Specified in range: 0.0 - 1.0
     """
-    num_of_request = int(num_requests * percent)
+    num_datums = int(length * percent)
 
     processed_count = 0
-    for response_time in sorted(response_times.keys(), reverse=True):
-        processed_count += response_times[response_time]
-        if num_requests - processed_count <= num_of_request:
-            return response_time
+    for key,count in sorted(source_data.items(), reverse=True):
+        processed_count += count
+        if length - processed_count <= num_datums:
+            return key
     # if all response times were None
     return 0
 
 
-def diff_response_time_dicts(latest: Dict[int, int], old: Dict[int, int]) -> Dict[int, int]:
+def diff_entry_dicts(latest: EntryDictType, old: EntryDictType) -> EntryDictType:
     """
-    Returns the delta between two {response_times:request_count} dicts.
+    Returns the delta between two {key:request_count} dicts.
 
-    Used together with the response_times cache to get the response times for the
+    Used together with the data cache to get the data for the
     last X seconds, which in turn is used to calculate the current response time
     percentiles.
     """
@@ -185,24 +189,36 @@ def diff_response_time_dicts(latest: Dict[int, int], old: Dict[int, int]) -> Dic
             new[t] = diff
     return new
 
+K = TypeVar('K')
+V = TypeVar('V')
+RequestMetaType = Dict
+StatsKeyType = Tuple[str,str]
+
+class defaultdictk(DefaultDict[K,V],Generic[K,V]):
+   def __missing__(self, key):
+      if self.default_factory:
+         value = self[key] = self.default_factory(key)
+         return value
+      else:
+         raise KeyError(key)
 
 class RequestStats:
     """
     Class that holds the request statistics. Accessible in a User from self.environment.stats
     """
 
-    def __init__(self, use_response_times_cache=True):
+    def __init__(self, use_data_cache=True):
         """
-        :param use_response_times_cache: The value of use_response_times_cache will be set for each StatsEntry()
-                                         when they are created. Settings it to False saves some memory and CPU
-                                         cycles which we can do on Worker nodes where the response_times_cache
-                                         is not needed.
+        :param use_data_cache: The value of use_data_cache will be set for each StatsEntry()
+                               when they are created. Settings it to False saves some memory and CPU
+                               cycles which we can do on Worker nodes where the data_cache
+                               is not needed.
         """
-        self.use_response_times_cache = use_response_times_cache
-        self.entries: Dict[Tuple[str, str], StatsEntry] = {}
-        self.errors: Dict[str, StatsError] = {}
-        self.total = StatsEntry(self, "Aggregated", None, use_response_times_cache=self.use_response_times_cache)
-        self.history = []
+        self.use_data_cache = use_data_cache
+        self.clear_all()
+
+    def makeStatsEntry(self,key:StatsKeyType):
+        return StatsEntry(self,key,self.use_data_cache)
 
     @property
     def num_requests(self):
@@ -224,31 +240,46 @@ class RequestStats:
     def start_time(self):
         return self.total.start_time
 
-    def log_request(self, method: str, name: str, response_time: int, content_length: int) -> None:
-        self.total.log(response_time, content_length)
-        self.get(name, method).log(response_time, content_length)
+    @classmethod
+    def key_from_meta(cls,request_meta:RequestMetaType,**kw):
+        return (request_meta['name'],request_meta['method'])
 
-    def log_error(self, method: str, name: str, error: Optional[Union[Exception, str]]) -> None:
-        self.total.log_error(error)
-        self.get(name, method).log_error(error)
+    @classmethod
+    def error_key_from_meta(cls,request_meta:RequestMetaType, key=None, error_key=None, error: Optional[Union[Exception, str]]=None, **kw) -> str:
+        if key is None:
+            key = cls.key_from_meta(request_meta)
+        key = f"{key[1]}.{key[0]}.{cls.parse_error(error)!r}"
+        return hashlib.sha256(key.encode("utf-8")).hexdigest()
+
+    def log_request(self, request_meta:RequestMetaType, key:Tuple[str,str]=None, log_error=True, **kw) -> None:
+        if key is None:
+            key = self.key_from_meta(request_meta,key=key,**kw)
+        self.total.log(request_meta,key=key,**kw)
+        self.entries[key].log(request_meta,key=key,**kw)
+        if log_error:
+            error = request_meta['exception']
+            if error is not None:
+                self.log_error(request_meta,error=error,key=key,**kw)
+            
+
+    def log_error(self, request_meta:Optional[RequestMetaType]=None, error: Optional[Union[Exception, str]]=None, key:Optional[StatsKeyType]=None, error_key=None, **kw) -> None:
+        if key is None:
+            key = self.key_from_meta(request_meta,**kw)
+        if error is None:
+            error = request_meta['exception']
 
         # store error in errors dict
-        key = StatsError.create_key(method, name, error)
-        entry = self.errors.get(key)
-        if not entry:
-            entry = StatsError(method, name, error)
-            self.errors[key] = entry
-        entry.occurred()
+        if error_key is None:
+            error_key = self.error_key_from_meta(request_meta,key=key,error=error,**kw)
 
-    def get(self, name: str, method: str) -> "StatsEntry":
-        """
-        Retrieve a StatsEntry instance by name and method
-        """
-        entry = self.entries.get((name, method))
-        if not entry:
-            entry = StatsEntry(self, name, method, use_response_times_cache=self.use_response_times_cache)
-            self.entries[(name, method)] = entry
-        return entry
+        self.total.log_error(request_meta,key=key,error_key=error_key,error=error,**kw)
+        self.entries[key].log_error(request_meta,key=key,error_key=error_key,error=error,**kw)
+
+        entry = self.errors.get(error_key)
+        if entry is None:
+            entry = StatsError(key=key, error_key=error_key,error=error)
+            self.errors[error_key] = entry
+        entry.occurred()
 
     def reset_all(self) -> None:
         """
@@ -261,23 +292,216 @@ class RequestStats:
         self.history = []
 
     def clear_all(self) -> None:
-        """
+        """git
         Remove all stats entries and errors
         """
-        self.total = StatsEntry(self, "Aggregated", "", use_response_times_cache=self.use_response_times_cache)
-        self.entries = {}
-        self.errors = {}
+        self.entries: DefaultDict[StatsKeyType, StatsEntry] = defaultdictk(self.makeStatsEntry)
+        self.errors: Dict[str, StatsError] = {}
+        self.total = self.makeStatsEntry(("Aggregated", None))
         self.history = []
 
     def serialize_stats(self) -> List["StatsEntryDict"]:
-        return [
-            self.entries[key].get_stripped_report()
-            for key in self.entries.keys()
-            if not (self.entries[key].num_requests == 0 and self.entries[key].num_failures == 0)
-        ]
+        return [v.get_stripped_report() for v in self.entries.values() if not (v.num_requests == 0 and v.num_failures == 0)]
 
     def serialize_errors(self) -> Dict[str, "StatsErrorDict"]:
         return {k: e.serialize() for k, e in self.errors.items()}
+
+_ignore = object()
+
+CacheEntry = namedtuple("CacheEntry", ["dist", "num_requests"])
+
+class DistMinMaxTotal:
+    def __init__(self,owner):
+        self.owner = owner
+        self.reset()
+        pass
+
+    def post_value(self,value):
+        if value is _ignore:
+            return
+            
+        self.total += value
+
+        if self.min is None:
+            self.min = value
+
+        self.min = min(self.min, value)
+        self.max = max(self.max, value)
+
+        # increase request count for the rounded key in response time dict
+        dist_key = self.dist_key_of_value(value)
+        self.dist[dist_key] += 1
+
+    def dist_key_of_value(self,value):
+        # to avoid to much data that has to be transferred to the master node when
+        # running in distributed mode, we save the response time rounded in a dict
+        # so that 147 becomes 150, 3432 becomes 3400 and 58760 becomes 59000
+        if value < 100:
+            return round(value)
+        elif value < 1000:
+            return round(value, -1)
+        elif value < 10000:
+            return round(value, -2)
+        else:
+            return round(value, -3)
+
+    def reset(self):
+        self.total:int = 0
+        self.min:int = None
+        self.max:int = 0
+        self.dist:DistDictType = defaultdict(lambda:0)
+        """
+        A {value => count} dict that holds the value distribution of all
+        the requests.
+
+        The keys (the value -- ttlb or ttfb in ms) are rounded to store 1, 2, ... 9, 10, 20. .. 90,
+        100, 200 .. 900, 1000, 2000 ... 9000, in order to save memory.
+
+        This dict is used to calculate the median and percentile response times.
+        """
+        self.cache: Optional[OrderedDictType[int, CacheEntry]] = None
+        """
+        If use_data_cache is set to True, this will be a {timestamp => DistDictType}
+        OrderedDict that holds a copy of the dist dicts for each of the last 20 seconds.
+        """
+
+    def serialize(self):
+        return dict(dist=self.dist,total=self.total,min=self.min,max=self.max)
+        pass
+
+    @classmethod
+    def unserialize(cls,owner,data):
+        try:
+            dist=data['dist']
+            ret=DistMinMaxTotal(owner)
+            ret.dist.update(dist)
+            ret.total=data['total']
+            ret.min=data['min']
+            ret.max=data['max']
+            return ret
+        except (TypeError,KeyError) as e:
+            return data
+
+    @property
+    def avg(self) -> float:
+        try:
+            return float(self.total) / (self.owner.num_requests - self.owner.num_none_requests)
+        except ZeroDivisionError:
+            return 0.0
+
+    @property
+    def median(self) -> int:
+        if not self.dist:
+            return 0
+        median = median_from_dict(self.owner.num_requests - self.owner.num_none_requests, self.dist) or 0
+
+        # Since we only use two digits of precision when calculating the median
+        # while still using the exact values for min and max, the following checks
+        # makes sure that we don't report a median > max or median < min when a StatsEntry only
+        # have one (or very few) really slow requests
+        if median > self.max:
+            median = self.max
+        elif self.min is not None and median < self.min:
+            median = self.min
+
+        return median
+
+    def extend(self,other):
+        self.total += other.total
+        self.max = max(self.max, other.max)
+        if self.min is not None and other.min is not None:
+            self.min = min(self.min, other.min)
+        elif other.min is not None:
+            # this means self.min is None, so we can safely replace it
+            self.min = other.min
+        for key,value in other.dist.items():
+            self.dist[key] += value
+
+    def to_string(self):
+        return "%7d %7d %7d %7d"%(self.avg,self.min or 0,self.max,self.median or 0)
+    
+    def get_percentile(self, percent: float) -> int:
+        """
+        Get the response time that a certain number of percent of the requests
+        finished within.
+
+        Percent specified in range: 0.0 - 1.0
+        """
+        return calculate_percentile(self.dist, self.owner.num_requests, percent)
+
+
+    def get_current_percentile(self, percent: float) -> Optional[int]:
+        """
+        Calculate the *current* response time for a certain percentile. We use a sliding
+        window of (approximately) the last 10 seconds (specified by CURRENT_PERCENTILE_WINDOW)
+        when calculating this.
+        """
+        if not self.owner.use_data_cache:
+            raise ValueError(
+                "StatsEntry.use_data_cache must be set to True if we should be able to calculate the _current_ response time percentile"
+            )
+        # First, we want to determine which of the cached dist dicts we should
+        # use for approximately 10 seconds ago.
+        t = int(time.time())
+        # Since we can't be sure that the cache contains an entry for every second.
+        # We'll construct a list of timestamps which we consider acceptable keys to be used
+        # when trying to fetch the cached dist. We construct this list in such a way
+        # that it's ordered by preference by starting to add t-10, then t-11, t-9, t-12, t-8,
+        # and so on
+        acceptable_timestamps: List[int] = []
+        acceptable_timestamps.append(t - CURRENT_PERCENTILE_WINDOW)
+        for i in range(1, 9):
+            acceptable_timestamps.append(t - CURRENT_PERCENTILE_WINDOW - i)
+            acceptable_timestamps.append(t - CURRENT_PERCENTILE_WINDOW + i)
+
+        cached = None
+        if self.cache is not None:
+            for ts in acceptable_timestamps:
+                cached = self.cache.get(ts)
+                if cached is not None:
+                    break
+
+        if cached is not None:
+            # If we found an acceptable cached response times, we'll calculate a new response
+            # times dict of the last 10 seconds (approximately) by diffing it with the current
+            # total response times. Then we'll use that to calculate a response time percentile
+            # for that timeframe
+            return calculate_percentile(
+                diff_entry_dicts(self.dist, cached.dist),
+                self.owner.num_requests - cached.num_requests,
+                percent,
+            )
+        # if time was not in response times cache window
+        return None
+
+    def _cache_data(self, t: int) -> None:
+        if self.cache is None:
+            self.cache = OrderedDict()
+
+        self.cache[t] = CacheEntry(dist=copy(self.dist),num_requests=self.owner.num_requests)
+
+        # We'll use a cache size of CURRENT_PERCENTILE_WINDOW + 10 since - in the extreme case -
+        # we might still use response times (from the cache) for t-CURRENT_PERCENTILE_WINDOW-10
+        # to calculate the current percentile, if we're missing cached values for the subsequent
+        # 20 seconds
+        cache_size = CURRENT_PERCENTILE_WINDOW + 10
+
+        if len(self.cache) > cache_size:
+            # only keep the latest 20 dist dicts
+            for _ in range(len(self.cache) - cache_size):
+                self.cache.popitem(last=False)
+
+    def percentile(self) -> str:
+        if not self.owner.num_requests:
+            raise ValueError("Can't calculate percentile on url with no successful requests")
+
+        tpl = f"%-{str(STATS_TYPE_WIDTH)}s %-{str(STATS_NAME_WIDTH)}s %8d {' '.join(['%6d'] * len(PERCENTILES_TO_REPORT))}"
+
+        return tpl % (
+            (self.owner.key[1] or "", self.owner.key[0])
+            + tuple(self.get_percentile(p) for p in PERCENTILES_TO_REPORT)
+            + (self.owner.num_requests,)
+        )
 
 
 class StatsEntry:
@@ -285,16 +509,14 @@ class StatsEntry:
     Represents a single stats entry (name and method)
     """
 
-    def __init__(self, stats: Optional[RequestStats], name: str, method: str, use_response_times_cache: bool = False):
+    def __init__(self, stats: Optional[RequestStats], key:StatsKeyType, use_data_cache: bool = False):
         self.stats = stats
-        self.name = name
-        """ Name (URL) of this stats entry """
-        self.method = method
-        """ Method (GET, POST, PUT, etc.) """
-        self.use_response_times_cache = use_response_times_cache
+        self.key = key
+        """ tuple of Name (URL) of this stats entry Method (GET, POST, PUT, etc.) """
+        self.use_data_cache = use_data_cache
         """
-        If set to True, the copy of the response_time dict will be stored in response_times_cache
-        every second, and kept for 20 seconds (by default, will be CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW + 10).
+        If set to True, the copy of the stats source data will be stored in data_cache
+        every second, and kept for 20 seconds (by default, will be CURRENT_PERCENTILE_WINDOW + 10).
         We can use this dict to calculate the *current*  median response time, as well as other response
         time percentiles.
         """
@@ -304,31 +526,14 @@ class StatsEntry:
         """ The number of requests made with a None response time (typically async requests) """
         self.num_failures: int = 0
         """ Number of failed request """
-        self.total_response_time: int = 0
-        """ Total sum of the response times """
-        self.min_response_time: Optional[int] = None
-        """ Minimum response time """
-        self.max_response_time: int = 0
-        """ Maximum response time """
+        self.ttlb = DistMinMaxTotal(self)
+        """ Time to last byte min max total"""
+        self.ttfb = DistMinMaxTotal(self)
+        """ Time to first byte min max total"""
         self.num_reqs_per_sec: Dict[int, int] = {}
         """ A {second => request_count} dict that holds the number of requests made per second """
         self.num_fail_per_sec: Dict[int, int] = {}
         """ A (second => failure_count) dict that hold the number of failures per second """
-        self.response_times: Dict[int, int] = {}
-        """
-        A {response_time => count} dict that holds the response time distribution of all
-        the requests.
-
-        The keys (the response time in ms) are rounded to store 1, 2, ... 9, 10, 20. .. 90,
-        100, 200 .. 900, 1000, 2000 ... 9000, in order to save memory.
-
-        This dict is used to calculate the median and percentile response times.
-        """
-        self.response_times_cache: Optional[OrderedDictType[int, CachedResponseTimes]] = None
-        """
-        If use_response_times_cache is set to True, this will be a {timestamp => CachedResponseTimes()}
-        OrderedDict that holds a copy of the response_times dict for each of the last 20 seconds.
-        """
         self.total_content_length: int = 0
         """ The sum of the content length of all the requests for this entry """
         self.start_time: float = 0.0
@@ -342,32 +547,31 @@ class StatsEntry:
         self.num_requests = 0
         self.num_none_requests = 0
         self.num_failures = 0
-        self.total_response_time = 0
-        self.response_times = {}
-        self.min_response_time = None
-        self.max_response_time = 0
+        self.ttlb.reset()
+        self.ttfb.reset()
         self.last_request_timestamp = None
         self.num_reqs_per_sec = {}
         self.num_fail_per_sec = {}
         self.total_content_length = 0
-        if self.use_response_times_cache:
-            self.response_times_cache = OrderedDict()
-            self._cache_response_times(int(time.time()))
+        if self.use_data_cache:
+            self.data_cache = OrderedDict()
+            self._cache_data(int(time.time()))
 
-    def log(self, response_time: int, content_length: int) -> None:
+    def log(self, request_meta:RequestMetaType) -> None:
         # get the time
         current_time = time.time()
         t = int(current_time)
 
-        if self.use_response_times_cache and self.last_request_timestamp and t > int(self.last_request_timestamp):
-            # see if we shall make a copy of the response_times dict and store in the cache
-            self._cache_response_times(t - 1)
+        if self.use_data_cache and self.last_request_timestamp and t > int(self.last_request_timestamp):
+            # see if we shall make a copy of the dist dicts and store in the cache
+            self._cache_data(t - 1)
 
         self.num_requests += 1
         self._log_time_of_request(current_time)
-        self._log_response_time(response_time)
+        self._log_request_meta(request_meta)
 
         # increase total content-length
+        content_length = request_meta['content_length']
         self.total_content_length += content_length
 
     def _log_time_of_request(self, current_time: float) -> None:
@@ -375,34 +579,14 @@ class StatsEntry:
         self.num_reqs_per_sec[t] = self.num_reqs_per_sec.setdefault(t, 0) + 1
         self.last_request_timestamp = current_time
 
-    def _log_response_time(self, response_time: int) -> None:
-        if response_time is None:
+    def _log_request_meta(self, request_meta: RequestMetaType) -> None:
+        ttlb = request_meta.get('ttlb') # TODO special value of ttlb None
+        if ttlb is None:
             self.num_none_requests += 1
             return
 
-        self.total_response_time += response_time
-
-        if self.min_response_time is None:
-            self.min_response_time = response_time
-
-        self.min_response_time = min(self.min_response_time, response_time)
-        self.max_response_time = max(self.max_response_time, response_time)
-
-        # to avoid to much data that has to be transferred to the master node when
-        # running in distributed mode, we save the response time rounded in a dict
-        # so that 147 becomes 150, 3432 becomes 3400 and 58760 becomes 59000
-        if response_time < 100:
-            rounded_response_time = round(response_time)
-        elif response_time < 1000:
-            rounded_response_time = round(response_time, -1)
-        elif response_time < 10000:
-            rounded_response_time = round(response_time, -2)
-        else:
-            rounded_response_time = round(response_time, -3)
-
-        # increase request count for the rounded key in response time dict
-        self.response_times.setdefault(rounded_response_time, 0)
-        self.response_times[rounded_response_time] += 1
+        self.ttlb.post_value(ttlb)
+        self.ttlb.post_value(request_meta.get('ttfb',_ignore))
 
     def log_error(self, error: Optional[Union[Exception, str]]) -> None:
         self.num_failures += 1
@@ -418,30 +602,6 @@ class StatsEntry:
                 return 1.0
             else:
                 return 0.0
-
-    @property
-    def avg_response_time(self) -> float:
-        try:
-            return float(self.total_response_time) / (self.num_requests - self.num_none_requests)
-        except ZeroDivisionError:
-            return 0.0
-
-    @property
-    def median_response_time(self) -> int:
-        if not self.response_times:
-            return 0
-        median = median_from_dict(self.num_requests - self.num_none_requests, self.response_times) or 0
-
-        # Since we only use two digits of precision when calculating the median response time
-        # while still using the exact values for min and max response times, the following checks
-        # makes sure that we don't report a median > max or median < min when a StatsEntry only
-        # have one (or very few) really slow requests
-        if median > self.max_response_time:
-            median = self.max_response_time
-        elif self.min_response_time is not None and median < self.min_response_time:
-            median = self.min_response_time
-
-        return median
 
     @property
     def current_rps(self) -> float:
@@ -507,47 +667,46 @@ class StatsEntry:
         self.num_requests += other.num_requests
         self.num_none_requests += other.num_none_requests
         self.num_failures += other.num_failures
-        self.total_response_time += other.total_response_time
-        self.max_response_time = max(self.max_response_time, other.max_response_time)
-        if self.min_response_time is not None and other.min_response_time is not None:
-            self.min_response_time = min(self.min_response_time, other.min_response_time)
-        elif other.min_response_time is not None:
-            # this means self.min_response_time is None, so we can safely replace it
-            self.min_response_time = other.min_response_time
+        self.ttlb.extend(other.ttlb)
+        self.ttfb.extend(other.ttfb)
         self.total_content_length += other.total_content_length
 
-        for key in other.response_times:
-            self.response_times[key] = self.response_times.get(key, 0) + other.response_times[key]
         for key in other.num_reqs_per_sec:
             self.num_reqs_per_sec[key] = self.num_reqs_per_sec.get(key, 0) + other.num_reqs_per_sec[key]
         for key in other.num_fail_per_sec:
             self.num_fail_per_sec[key] = self.num_fail_per_sec.get(key, 0) + other.num_fail_per_sec[key]
 
-        if self.use_response_times_cache:
+        if self.use_data_cache:
             # If we've entered a new second, we'll cache the response times. Note that there
             # might still be reports from other worker nodes - that contains requests for the same
             # time periods - that hasn't been received/accounted for yet. This will cause the cache to
-            # lag behind a second or two, but since StatsEntry.current_response_time_percentile()
+            # lag behind a second or two, but since StatsEntry.current_percentile()
             # (which is what the response times cache is used for) uses an approximation of the
             # last 10 seconds anyway, it should be fine to ignore this.
             last_time = int(self.last_request_timestamp) if self.last_request_timestamp else None
             if last_time and last_time > (old_last_request_timestamp and int(old_last_request_timestamp) or 0):
-                self._cache_response_times(last_time)
+                self._cache_data(last_time)
 
     def serialize(self) -> StatsEntryDict:
-        return cast(StatsEntryDict, {key: getattr(self, key, None) for key in StatsEntryDict.__annotations__.keys()})
+        def deep(v):
+            return v.serialize() if type(v) is DistMinMaxTotal else v
+        # TODO shouldn't this take a copy?
+        return cast(StatsEntryDict, {key: deep(getattr(self, key, None)) for key in StatsEntryDict.__annotations__.keys()})
 
     @classmethod
     def unserialize(cls, data: StatsEntryDict) -> "StatsEntry":
         """Return the unserialzed version of the specified dict"""
-        obj = cls(None, data["name"], data["method"])
+        obj = cls(None, data["key"])
         valid_keys = StatsEntryDict.__annotations__.keys()
 
+        def deep(v):
+            return DistMinMaxTotal.unserialize(obj,v) #returns v if it's not a DistMinMaxTotal
+            
         for key, value in data.items():
-            if key in ["name", "method"] or key not in valid_keys:
+            if key=="key" or key not in valid_keys:
                 continue
 
-            setattr(obj, key, value)
+            setattr(obj, key, deep(value))
         return obj
 
     def get_stripped_report(self) -> StatsEntryDict:
@@ -560,7 +719,7 @@ class StatsEntry:
 
     def to_string(self, current=True) -> str:
         """
-        Return the stats as a string suitable for console output. If current is True, it'll show
+        Return the stats as a string suitable for console output. If `current is True, it'll show
         the RPS and failure rate for the last 10 seconds. If it's false, it'll show the total stats
         for the whole run.
         """
@@ -575,16 +734,14 @@ class StatsEntry:
             + str(STATS_TYPE_WIDTH)
             + "s %-"
             + str((STATS_NAME_WIDTH - STATS_TYPE_WIDTH) + 4)
-            + "s %7d %12s |%7d %7d %7d%7d | %7.2f %11.2f"
+            + "s %7d %12s | %s | %s | %7.2f %11.2f"
         ) % (
-            (self.method and self.method + " " or ""),
-            self.name,
+            (self.key[1] and self.key[1] + " " or ""),
+            self.key[0],
             self.num_requests,
             "%d(%.2f%%)" % (self.num_failures, self.fail_ratio * 100),
-            self.avg_response_time,
-            self.min_response_time or 0,
-            self.max_response_time,
-            self.median_response_time or 0,
+            self.ttlb.to_string(),
+            self.ttfb.to_string(),
             rps or 0,
             fail_per_sec or 0,
         )
@@ -592,96 +749,14 @@ class StatsEntry:
     def __str__(self) -> str:
         return self.to_string(current=True)
 
-    def get_response_time_percentile(self, percent: float) -> int:
-        """
-        Get the response time that a certain number of percent of the requests
-        finished within.
-
-        Percent specified in range: 0.0 - 1.0
-        """
-        return calculate_response_time_percentile(self.response_times, self.num_requests, percent)
-
-    def get_current_response_time_percentile(self, percent: float) -> Optional[int]:
-        """
-        Calculate the *current* response time for a certain percentile. We use a sliding
-        window of (approximately) the last 10 seconds (specified by CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW)
-        when calculating this.
-        """
-        if not self.use_response_times_cache:
-            raise ValueError(
-                "StatsEntry.use_response_times_cache must be set to True if we should be able to calculate the _current_ response time percentile"
-            )
-        # First, we want to determine which of the cached response_times dicts we should
-        # use to get response_times for approximately 10 seconds ago.
-        t = int(time.time())
-        # Since we can't be sure that the cache contains an entry for every second.
-        # We'll construct a list of timestamps which we consider acceptable keys to be used
-        # when trying to fetch the cached response_times. We construct this list in such a way
-        # that it's ordered by preference by starting to add t-10, then t-11, t-9, t-12, t-8,
-        # and so on
-        acceptable_timestamps: List[int] = []
-        acceptable_timestamps.append(t - CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW)
-        for i in range(1, 9):
-            acceptable_timestamps.append(t - CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW - i)
-            acceptable_timestamps.append(t - CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW + i)
-
-        cached: Optional[CachedResponseTimes] = None
-        if self.response_times_cache is not None:
-            for ts in acceptable_timestamps:
-                if ts in self.response_times_cache:
-                    cached = self.response_times_cache[ts]
-                    break
-
-        if cached:
-            # If we found an acceptable cached response times, we'll calculate a new response
-            # times dict of the last 10 seconds (approximately) by diffing it with the current
-            # total response times. Then we'll use that to calculate a response time percentile
-            # for that timeframe
-            return calculate_response_time_percentile(
-                diff_response_time_dicts(self.response_times, cached.response_times),
-                self.num_requests - cached.num_requests,
-                percent,
-            )
-        # if time was not in response times cache window
-        return None
-
-    def percentile(self) -> str:
-        if not self.num_requests:
-            raise ValueError("Can't calculate percentile on url with no successful requests")
-
-        tpl = f"%-{str(STATS_TYPE_WIDTH)}s %-{str(STATS_NAME_WIDTH)}s %8d {' '.join(['%6d'] * len(PERCENTILES_TO_REPORT))}"
-
-        return tpl % (
-            (self.method or "", self.name)
-            + tuple(self.get_response_time_percentile(p) for p in PERCENTILES_TO_REPORT)
-            + (self.num_requests,)
-        )
-
-    def _cache_response_times(self, t: int) -> None:
-        if self.response_times_cache is None:
-            self.response_times_cache = OrderedDict()
-
-        self.response_times_cache[t] = CachedResponseTimes(
-            response_times=copy(self.response_times),
-            num_requests=self.num_requests,
-        )
-
-        # We'll use a cache size of CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW + 10 since - in the extreme case -
-        # we might still use response times (from the cache) for t-CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW-10
-        # to calculate the current response time percentile, if we're missing cached values for the subsequent
-        # 20 seconds
-        cache_size = CURRENT_RESPONSE_TIME_PERCENTILE_WINDOW + 10
-
-        if len(self.response_times_cache) > cache_size:
-            # only keep the latest 20 response_times dicts
-            for _ in range(len(self.response_times_cache) - cache_size):
-                self.response_times_cache.popitem(last=False)
+    def _cache_data(self, t: int) -> None:
+        self.ttlb._cache_data(t)
+        self.ttfb._cache_data(t)
 
 
 class StatsError:
-    def __init__(self, method: str, name: str, error: Optional[Union[Exception, str]], occurrences: int = 0):
-        self.method = method
-        self.name = name
+    def __init__(self, key: Tuple[str,str], error: Optional[Union[Exception, str]], occurrences: int = 0):
+        self.key = key
         self.error = error
         self.occurrences = occurrences
 
@@ -699,11 +774,6 @@ class StatsError:
         hex_address = string_error[start:end]
         return string_error.replace(hex_address, "0x....")
 
-    @classmethod
-    def create_key(cls, method: str, name: str, error: Optional[Union[Exception, str]]) -> str:
-        key = f"{method}.{name}.{StatsError.parse_error(error)!r}"
-        return hashlib.sha256(key.encode("utf-8")).hexdigest()
-
     def occurred(self) -> None:
         self.occurrences += 1
 
@@ -720,7 +790,7 @@ class StatsError:
             # standalone, unwrapped exception
             unwrapped_error = repr(error)
 
-        return f"{self.method} {self.name}: {unwrapped_error}"
+        return f"{self.key}: {unwrapped_error}"
 
     def serialize(self) -> StatsErrorDict:
         def _getattr(obj: "StatsError", key: str, default: Optional[Any]) -> Optional[Any]:
@@ -742,16 +812,16 @@ def avg(values: List[Union[float, int]]) -> float:
     return sum(values, 0.0) / max(len(values), 1)
 
 
-def median_from_dict(total: int, count: Dict[int, int]) -> int:
+def median_from_dict(total: int, count_by_value: DistDictType) -> int:
     """
     total is the number of requests made
-    count is a dict {response_time: count}
+    count is a dict {value: count}
     """
     pos = (total - 1) / 2
-    for k in sorted(count.keys()):
-        if pos < count[k]:
+    for k in sorted(count_by_value.keys()):
+        if pos < count_by_value[k]:
             return k
-        pos -= count[k]
+        pos -= count_by_value[k]
 
     return k
 
@@ -766,10 +836,9 @@ def setup_distributed_stats_event_listeners(events: Events, stats: RequestStats)
     def on_worker_report(client_id: str, data: Dict[str, Any]) -> None:
         for stats_data in data["stats"]:
             entry = StatsEntry.unserialize(stats_data)
-            request_key = (entry.name, entry.method)
-            if request_key not in stats.entries:
-                stats.entries[request_key] = StatsEntry(stats, entry.name, entry.method, use_response_times_cache=True)
-            stats.entries[request_key].extend(entry)
+            if entry.key not in stats.entries:
+                stats.entries[entry.key] = StatsEntry(stats, entry.key, use_data_cache=True)
+            stats.entries[entry.key].extend(entry)
 
         for error_key, error in data["errors"].items():
             if error_key not in stats.errors:
@@ -815,12 +884,12 @@ def print_percentile_stats(stats: RequestStats) -> None:
     console_logger.info(separator)
     for key in sorted(stats.entries.keys()):
         r = stats.entries[key]
-        if r.response_times:
-            console_logger.info(r.percentile())
+        if r.ttlb:
+            console_logger.info(r.ttlb.percentile())
     console_logger.info(separator)
 
-    if stats.total.response_times:
-        console_logger.info(stats.total.percentile())
+    if stats.total.ttlb:
+        console_logger.info(stats.total.ttlb.percentile())
     console_logger.info("")
 
 
@@ -854,15 +923,17 @@ def stats_history(runner: "Runner") -> None:
     """Save current stats info to history for charts of report."""
     while True:
         stats = runner.stats
-        if not stats.total.use_response_times_cache:
+        if not stats.total.use_data_cache:
             break
         if runner.state != "stopped":
             r = {
                 "time": datetime.datetime.utcnow().strftime("%H:%M:%S"),
                 "current_rps": stats.total.current_rps or 0,
                 "current_fail_per_sec": stats.total.current_fail_per_sec or 0,
-                "response_time_percentile_95": stats.total.get_current_response_time_percentile(0.95) or 0,
-                "response_time_percentile_50": stats.total.get_current_response_time_percentile(0.5) or 0,
+                "ttlb_percentile_95": stats.total.ttlb.get_current_percentile(0.95) or 0,
+                "ttlb_percentile_50": stats.total.ttlb.get_current_percentile(0.5) or 0,
+                "ttfb_percentile_95": stats.total.ttfb.get_current_percentile(0.95) or 0,
+                "ttfb_percentile_50": stats.total.ttfb.get_current_percentile(0.5) or 0,
                 "user_count": runner.user_count or 0,
             }
             stats.history.append(r)
@@ -910,9 +981,9 @@ class StatsCSV:
         if not stats_entry.num_requests:
             return self.percentiles_na
         elif use_current:
-            return [int(stats_entry.get_current_response_time_percentile(x) or 0) for x in self.percentiles_to_report]
+            return [int(stats_entry.ttlb.get_current_percentile(x) or 0) for x in self.percentiles_to_report]
         else:
-            return [int(stats_entry.get_response_time_percentile(x) or 0) for x in self.percentiles_to_report]
+            return [int(stats_entry.ttlb.get_percentile(x) or 0) for x in self.percentiles_to_report]
 
     def requests_csv(self, csv_writer: CSVWriter) -> None:
         """Write requests csv with header and data rows."""
@@ -926,14 +997,14 @@ class StatsCSV:
             csv_writer.writerow(
                 chain(
                     [
-                        stats_entry.method,
-                        stats_entry.name,
+                        stats_entry.key[1],
+                        stats_entry.key[0],
                         stats_entry.num_requests,
                         stats_entry.num_failures,
-                        stats_entry.median_response_time,
-                        stats_entry.avg_response_time,
-                        stats_entry.min_response_time or 0,
-                        stats_entry.max_response_time,
+                        stats_entry.ttlb.median,
+                        stats_entry.ttlb.avg,
+                        stats_entry.ttlb.min or 0,
+                        stats_entry.ttlb.max,
                         stats_entry.avg_content_length,
                         stats_entry.total_rps,
                         stats_entry.total_fail_per_sec,
@@ -950,8 +1021,8 @@ class StatsCSV:
         for stats_error in sort_stats(self.environment.stats.errors):
             csv_writer.writerow(
                 [
-                    stats_error.method,
-                    stats_error.name,
+                    stats_error.key[1],
+                    stats_error.key[0],
                     StatsError.parse_error(stats_error.error),
                     stats_error.occurrences,
                 ]
@@ -1081,8 +1152,8 @@ class StatsCSVFileWriter(StatsCSV):
                     (
                         timestamp,
                         self.environment.runner.user_count if self.environment.runner is not None else 0,
-                        stats_entry.method or "",
-                        stats_entry.name,
+                        stats_entry.key[1] or "",
+                        stats_entry.key[0],
                         f"{stats_entry.current_rps:2f}",
                         f"{stats_entry.current_fail_per_sec:2f}",
                     ),
@@ -1090,10 +1161,10 @@ class StatsCSVFileWriter(StatsCSV):
                     (
                         stats_entry.num_requests,
                         stats_entry.num_failures,
-                        stats_entry.median_response_time,
-                        stats_entry.avg_response_time,
-                        stats_entry.min_response_time or 0,
-                        stats_entry.max_response_time,
+                        stats_entry.ttlb.median,
+                        stats_entry.ttlb.avg,
+                        stats_entry.ttlb.min or 0,
+                        stats_entry.ttlb.max,
                         stats_entry.avg_content_length,
                     ),
                 )
