@@ -43,7 +43,7 @@ class EventHook:
                 # in which case they are entirely appropriate and should not be caught
                 raise
             except Exception:
-                logging.error("Uncaught exception in event handler: \n%s", traceback.format_exc(),stack_info=True)
+                logging.error("Uncaught exception in event handler: \n%s", traceback.format_exc(), stack_info=True)
                 log.unhandled_greenlet_exception = True
 
 
@@ -227,9 +227,15 @@ class Events:
 
         self.request_failure = DeprecatedEventHook("request_failure event deprecated. Use the request event.")
 
-        def fire_deprecated_request_handlers(*,
-            request_type, name, ttlb, response_length, exception, context, **kwargs
-        ):
+        def fire_deprecated_request_handlers(*, request_meta, **kwargs):
+
+            request_type = request_meta["request_type"]
+            name = request_meta["url"]
+            ttlb = request_meta["ttlb"]
+            response_length = request_meta["response_length"]
+            exception = request_meta["exception"]
+            # context = request_meta["context"]
+
             if exception:
                 self.request_failure.fire(
                     request_type=request_type,
@@ -240,10 +246,7 @@ class Events:
                 )
             else:
                 self.request_success.fire(
-                    request_type=request_type,
-                    name=name,
-                    response_time=ttlb,
-                    response_length=response_length,
+                    request_type=request_type, name=name, response_time=ttlb, response_length=response_length
                 )
 
         self.request.add_listener(fire_deprecated_request_handlers)

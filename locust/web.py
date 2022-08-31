@@ -346,25 +346,20 @@ class WebUI:
                         "safe_name": escape(s.key[0], quote=False),
                         "num_requests": s.num_requests,
                         "num_failures": s.num_failures,
-
                         "avg_ttlb": s.ttlb.avg,
-                        "min_ttlb": 0 if s.min_ttlb is None else proper_round(s.min_ttlb),
-                        "max_ttlb": proper_round(s.max_ttlb),
-                        "current_rps": s.current_rps,
-                        "current_fail_per_sec": s.current_fail_per_sec,
-                        "median_ttlb": s.median_ttlb,
-                        "ninetieth_ttlb": s.get_ttlb_percentile(0.9),
-                        "ninety_ninth_ttlb": s.get_ttlb_percentile(0.99),
-
+                        "min_ttlb": 0 if s.ttlb.min is None else proper_round(s.ttlb.min),
+                        "max_ttlb": proper_round(s.ttlb.max),
+                        "median_ttlb": s.ttlb.median,
+                        "ninetieth_ttlb": s.ttlb.get_percentile(0.9),
+                        "ninety_ninth_ttlb": s.ttlb.get_percentile(0.99),
                         "avg_ttfb": s.ttfb.avg,
-                        "min_ttfb": 0 if s.min_ttfb is None else proper_round(s.min_ttfb),
-                        "max_ttfb": proper_round(s.max_ttfb),
+                        "min_ttfb": 0 if s.ttfb.min is None else proper_round(s.ttfb.min),
+                        "max_ttfb": proper_round(s.ttfb.max),
                         "current_rps": s.current_rps,
                         "current_fail_per_sec": s.current_fail_per_sec,
-                        "median_ttfb": s.median_ttfb,
-                        "ninetieth_ttfb": s.get_ttfb_percentile(0.9),
-                        "ninety_ninth_ttfb": s.get_ttfb_percentile(0.99),
-
+                        "median_ttfb": s.ttfb.median,
+                        "ninetieth_ttfb": s.ttfb.get_percentile(0.9),
+                        "ninety_ninth_ttfb": s.ttfb.get_percentile(0.99),
                         "avg_content_length": s.avg_content_length,
                     }
                 )
@@ -386,18 +381,10 @@ class WebUI:
             if stats:
                 report["total_rps"] = stats[len(stats) - 1]["current_rps"]
                 report["fail_ratio"] = environment.runner.stats.total.fail_ratio
-                report[
-                    "current_ttlb_percentile_95"
-                ] = environment.runner.stats.total.get_current_ttlb_percentile(0.95)
-                report[
-                    "current_ttlb_percentile_50"
-                ] = environment.runner.stats.total.get_current_ttlb_percentile(0.5)
-                report[
-                    "current_ttfb_percentile_95"
-                ] = environment.runner.stats.total.get_current_ttfb_percentile(0.95)
-                report[
-                    "current_ttfb_percentile_50"
-                ] = environment.runner.stats.total.get_current_ttfb_percentile(0.5)
+                report["current_ttlb_percentile_95"] = environment.runner.stats.total.ttlb.get_current_percentile(0.95)
+                report["current_ttlb_percentile_50"] = environment.runner.stats.total.ttlb.get_current_percentile(0.5)
+                report["current_ttfb_percentile_95"] = environment.runner.stats.total.ttfb.get_current_percentile(0.95)
+                report["current_ttfb_percentile_50"] = environment.runner.stats.total.ttfb.get_current_percentile(0.5)
 
             if isinstance(environment.runner, MasterRunner):
                 workers = []

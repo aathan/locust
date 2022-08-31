@@ -23,6 +23,7 @@ from .shape import LoadTestShape
 
 RunnerType = TypeVar("RunnerType", bound=Runner)
 
+
 class Environment:
     def __init__(
         self,

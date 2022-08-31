@@ -190,7 +190,7 @@ class HttpSession(requests.Session):
                     e = e.__context__
                 request_meta["exception"] = e
 
-            self.request_event.fire(**request_meta)
+            self.request_event.fire(request_meta=request_meta)
             if name:
                 response.url = orig_url
             return response
@@ -265,7 +265,7 @@ class ResponseContextManager(LocustResponse):
         return True
 
     def _report_request(self, exc=None):
-        self._request_event.fire(**self.request_meta)
+        self._request_event.fire(request_meta=self.request_meta)
 
     def success(self):
         """

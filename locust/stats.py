@@ -24,15 +24,16 @@ from typing import (
     Optional,
     OrderedDict as OrderedDictType,
     Callable,
+    Generic,
     TypeVar,
     cast,
 )
 
 # @TODO: typing.Protocol is in python >= 3.8
 try:
-    from typing import Protocol, TypedDict, DefaultDict, Generic, TypeVar
+    from typing import Protocol, TypedDict, DefaultDict
 except ImportError:
-    from typing_extensions import Protocol, TypedDict, DefaultDict, Generic, TypeVar  # type: ignore
+    from typing_extensions import Protocol, TypedDict, DefaultDict  # type: ignore
 
 from types import FrameType
 
@@ -63,16 +64,19 @@ class CSVWriter(Protocol):
 
 
 class StatsBaseDict(TypedDict):
-    key: Tuple[str,str]
+    key: Tuple[str, str]
 
-EntryDictType = Dict[int,int]
-DistDictType = Dict[int,int]
+
+EntryDictType = Dict[int, int]
+DistDictType = Dict[int, int]
+
 
 class MinMaxTotalDict(TypedDict):
     min: Optional[float]
     max: float
     total: float
     all: EntryDictType
+
 
 class StatsEntryDict(StatsBaseDict):
     last_request_timestamp: Optional[float]
@@ -166,7 +170,7 @@ def calculate_percentile(source_data: Dict[int, float], length: int, percent: fl
     num_datums = int(length * percent)
 
     processed_count = 0
-    for key,count in sorted(source_data.items(), reverse=True):
+    for key, count in sorted(source_data.items(), reverse=True):
         processed_count += count
         if length - processed_count <= num_datums:
             return key
@@ -189,18 +193,21 @@ def diff_entry_dicts(latest: EntryDictType, old: EntryDictType) -> EntryDictType
             new[t] = diff
     return new
 
-K = TypeVar('K')
-V = TypeVar('V')
-RequestMetaType = Dict
-StatsKeyType = Tuple[str,str]
 
-class defaultdictk(DefaultDict[K,V],Generic[K,V]):
-   def __missing__(self, key):
-      if self.default_factory:
-         value = self[key] = self.default_factory(key)
-         return value
-      else:
-         raise KeyError(key)
+K = TypeVar("K")
+V = TypeVar("V")
+RequestMetaType = Dict
+StatsKeyType = Tuple[str, str]
+
+
+class defaultdictk(DefaultDict[K, V], Generic[K, V]):
+    def __missing__(self, key):
+        if self.default_factory:
+            value = self[key] = self.default_factory(key)
+            return value
+        else:
+            raise KeyError(key)
+
 
 class RequestStats:
     """
@@ -217,8 +224,8 @@ class RequestStats:
         self.use_data_cache = use_data_cache
         self.clear_all()
 
-    def makeStatsEntry(self,key:StatsKeyType):
-        return StatsEntry(self,key,self.use_data_cache)
+    def makeStatsEntry(self, key: StatsKeyType):
+        return StatsEntry(self, key, self.use_data_cache)
 
     @property
     def num_requests(self):
@@ -241,43 +248,56 @@ class RequestStats:
         return self.total.start_time
 
     @classmethod
-    def key_from_meta(cls,request_meta:RequestMetaType,**kw):
-        return (request_meta['name'],request_meta['method'])
+    def key_from_meta(cls, request_meta: RequestMetaType, **kw):
+        return (request_meta["url"], request_meta["request_type"])
 
     @classmethod
-    def error_key_from_meta(cls,request_meta:RequestMetaType, key=None, error_key=None, error: Optional[Union[Exception, str]]=None, **kw) -> str:
+    def error_key_from_meta(
+        cls,
+        request_meta: RequestMetaType,
+        key=None,
+        error_key=None,
+        error: Optional[Union[Exception, str]] = None,
+        **kw,
+    ) -> str:
         if key is None:
             key = cls.key_from_meta(request_meta)
         key = f"{key[1]}.{key[0]}.{cls.parse_error(error)!r}"
         return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
-    def log_request(self, request_meta:RequestMetaType, key:Tuple[str,str]=None, log_error=True, **kw) -> None:
+    def log_request(self, request_meta: RequestMetaType, key: Tuple[str, str] = None, log_error=True, **kw) -> None:
         if key is None:
-            key = self.key_from_meta(request_meta,key=key,**kw)
-        self.total.log(request_meta,key=key,**kw)
-        self.entries[key].log(request_meta,key=key,**kw)
+            key = self.key_from_meta(request_meta, key=key, **kw)
+        self.total.log(request_meta, key=key, **kw)
+        self.entries[key].log(request_meta, key=key, **kw)
         if log_error:
-            error = request_meta['exception']
+            error = request_meta["exception"]
             if error is not None:
-                self.log_error(request_meta,error=error,key=key,**kw)
-            
+                self.log_error(request_meta, error=error, key=key, **kw)
 
-    def log_error(self, request_meta:Optional[RequestMetaType]=None, error: Optional[Union[Exception, str]]=None, key:Optional[StatsKeyType]=None, error_key=None, **kw) -> None:
+    def log_error(
+        self,
+        request_meta: Optional[RequestMetaType] = None,
+        error: Optional[Union[Exception, str]] = None,
+        key: Optional[StatsKeyType] = None,
+        error_key=None,
+        **kw,
+    ) -> None:
         if key is None:
-            key = self.key_from_meta(request_meta,**kw)
+            key = self.key_from_meta(request_meta, **kw)
         if error is None:
-            error = request_meta['exception']
+            error = request_meta["exception"]
 
         # store error in errors dict
         if error_key is None:
-            error_key = self.error_key_from_meta(request_meta,key=key,error=error,**kw)
+            error_key = self.error_key_from_meta(request_meta, key=key, error=error, **kw)
 
-        self.total.log_error(request_meta,key=key,error_key=error_key,error=error,**kw)
-        self.entries[key].log_error(request_meta,key=key,error_key=error_key,error=error,**kw)
+        self.total.log_error(request_meta, key=key, error_key=error_key, error=error, **kw)
+        self.entries[key].log_error(request_meta, key=key, error_key=error_key, error=error, **kw)
 
         entry = self.errors.get(error_key)
         if entry is None:
-            entry = StatsError(key=key, error_key=error_key,error=error)
+            entry = StatsError(key=key, error_key=error_key, error=error)
             self.errors[error_key] = entry
         entry.occurred()
 
@@ -301,25 +321,29 @@ class RequestStats:
         self.history = []
 
     def serialize_stats(self) -> List["StatsEntryDict"]:
-        return [v.get_stripped_report() for v in self.entries.values() if not (v.num_requests == 0 and v.num_failures == 0)]
+        return [
+            v.get_stripped_report() for v in self.entries.values() if not (v.num_requests == 0 and v.num_failures == 0)
+        ]
 
     def serialize_errors(self) -> Dict[str, "StatsErrorDict"]:
         return {k: e.serialize() for k, e in self.errors.items()}
+
 
 _ignore = object()
 
 CacheEntry = namedtuple("CacheEntry", ["dist", "num_requests"])
 
+
 class DistMinMaxTotal:
-    def __init__(self,owner):
+    def __init__(self, owner):
         self.owner = owner
         self.reset()
         pass
 
-    def post_value(self,value):
+    def post_value(self, value):
         if value is _ignore:
             return
-            
+
         self.total += value
 
         if self.min is None:
@@ -332,7 +356,7 @@ class DistMinMaxTotal:
         dist_key = self.dist_key_of_value(value)
         self.dist[dist_key] += 1
 
-    def dist_key_of_value(self,value):
+    def dist_key_of_value(self, value):
         # to avoid to much data that has to be transferred to the master node when
         # running in distributed mode, we save the response time rounded in a dict
         # so that 147 becomes 150, 3432 becomes 3400 and 58760 becomes 59000
@@ -346,10 +370,10 @@ class DistMinMaxTotal:
             return round(value, -3)
 
     def reset(self):
-        self.total:int = 0
-        self.min:int = None
-        self.max:int = 0
-        self.dist:DistDictType = defaultdict(lambda:0)
+        self.total: int = 0
+        self.min: int = None
+        self.max: int = 0
+        self.dist: DistDictType = defaultdict(lambda: 0)
         """
         A {value => count} dict that holds the value distribution of all
         the requests.
@@ -366,20 +390,20 @@ class DistMinMaxTotal:
         """
 
     def serialize(self):
-        return dict(dist=self.dist,total=self.total,min=self.min,max=self.max)
+        return dict(dist=self.dist, total=self.total, min=self.min, max=self.max)
         pass
 
     @classmethod
-    def unserialize(cls,owner,data):
+    def unserialize(cls, owner, data):
         try:
-            dist=data['dist']
-            ret=DistMinMaxTotal(owner)
+            dist = data["dist"]
+            ret = DistMinMaxTotal(owner)
             ret.dist.update(dist)
-            ret.total=data['total']
-            ret.min=data['min']
-            ret.max=data['max']
+            ret.total = data["total"]
+            ret.min = data["min"]
+            ret.max = data["max"]
             return ret
-        except (TypeError,KeyError) as e:
+        except (TypeError, KeyError):
             return data
 
     @property
@@ -406,7 +430,7 @@ class DistMinMaxTotal:
 
         return median
 
-    def extend(self,other):
+    def extend(self, other):
         self.total += other.total
         self.max = max(self.max, other.max)
         if self.min is not None and other.min is not None:
@@ -414,12 +438,12 @@ class DistMinMaxTotal:
         elif other.min is not None:
             # this means self.min is None, so we can safely replace it
             self.min = other.min
-        for key,value in other.dist.items():
+        for key, value in other.dist.items():
             self.dist[key] += value
 
     def to_string(self):
-        return "%7d %7d %7d %7d"%(self.avg,self.min or 0,self.max,self.median or 0)
-    
+        return "%7d %7d %7d %7d" % (self.avg, self.min or 0, self.max, self.median or 0)
+
     def get_percentile(self, percent: float) -> int:
         """
         Get the response time that a certain number of percent of the requests
@@ -428,7 +452,6 @@ class DistMinMaxTotal:
         Percent specified in range: 0.0 - 1.0
         """
         return calculate_percentile(self.dist, self.owner.num_requests, percent)
-
 
     def get_current_percentile(self, percent: float) -> Optional[int]:
         """
@@ -478,7 +501,7 @@ class DistMinMaxTotal:
         if self.cache is None:
             self.cache = OrderedDict()
 
-        self.cache[t] = CacheEntry(dist=copy(self.dist),num_requests=self.owner.num_requests)
+        self.cache[t] = CacheEntry(dist=copy(self.dist), num_requests=self.owner.num_requests)
 
         # We'll use a cache size of CURRENT_PERCENTILE_WINDOW + 10 since - in the extreme case -
         # we might still use response times (from the cache) for t-CURRENT_PERCENTILE_WINDOW-10
@@ -509,7 +532,7 @@ class StatsEntry:
     Represents a single stats entry (name and method)
     """
 
-    def __init__(self, stats: Optional[RequestStats], key:StatsKeyType, use_data_cache: bool = False):
+    def __init__(self, stats: Optional[RequestStats], key: StatsKeyType, use_data_cache: bool = False):
         self.stats = stats
         self.key = key
         """ tuple of Name (URL) of this stats entry Method (GET, POST, PUT, etc.) """
@@ -557,7 +580,7 @@ class StatsEntry:
             self.data_cache = OrderedDict()
             self._cache_data(int(time.time()))
 
-    def log(self, request_meta:RequestMetaType) -> None:
+    def log(self, request_meta: RequestMetaType, **kw) -> None:
         # get the time
         current_time = time.time()
         t = int(current_time)
@@ -571,7 +594,7 @@ class StatsEntry:
         self._log_request_meta(request_meta)
 
         # increase total content-length
-        content_length = request_meta['content_length']
+        content_length = request_meta["response_length"]
         self.total_content_length += content_length
 
     def _log_time_of_request(self, current_time: float) -> None:
@@ -580,15 +603,15 @@ class StatsEntry:
         self.last_request_timestamp = current_time
 
     def _log_request_meta(self, request_meta: RequestMetaType) -> None:
-        ttlb = request_meta.get('ttlb') # TODO special value of ttlb None
+        ttlb = request_meta.get("ttlb")  # TODO special value of ttlb None
         if ttlb is None:
             self.num_none_requests += 1
             return
 
         self.ttlb.post_value(ttlb)
-        self.ttlb.post_value(request_meta.get('ttfb',_ignore))
+        self.ttfb.post_value(request_meta.get("ttfb", _ignore))
 
-    def log_error(self, error: Optional[Union[Exception, str]]) -> None:
+    def log_error(self, error: Optional[Union[Exception, str]], **kw) -> None:
         self.num_failures += 1
         t = int(time.time())
         self.num_fail_per_sec[t] = self.num_fail_per_sec.setdefault(t, 0) + 1
@@ -690,8 +713,11 @@ class StatsEntry:
     def serialize(self) -> StatsEntryDict:
         def deep(v):
             return v.serialize() if type(v) is DistMinMaxTotal else v
+
         # TODO shouldn't this take a copy?
-        return cast(StatsEntryDict, {key: deep(getattr(self, key, None)) for key in StatsEntryDict.__annotations__.keys()})
+        return cast(
+            StatsEntryDict, {key: deep(getattr(self, key, None)) for key in StatsEntryDict.__annotations__.keys()}
+        )
 
     @classmethod
     def unserialize(cls, data: StatsEntryDict) -> "StatsEntry":
@@ -700,13 +726,14 @@ class StatsEntry:
         valid_keys = StatsEntryDict.__annotations__.keys()
 
         def deep(v):
-            return DistMinMaxTotal.unserialize(obj,v) #returns v if it's not a DistMinMaxTotal
-            
+            return DistMinMaxTotal.unserialize(obj, v)  # returns v if it's not a DistMinMaxTotal
+
         for key, value in data.items():
-            if key=="key" or key not in valid_keys:
+            if key == "key" or key not in valid_keys:
                 continue
 
             setattr(obj, key, deep(value))
+        obj.key = tuple(obj.key)  # lists are not hashable
         return obj
 
     def get_stripped_report(self) -> StatsEntryDict:
@@ -755,7 +782,7 @@ class StatsEntry:
 
 
 class StatsError:
-    def __init__(self, key: Tuple[str,str], error: Optional[Union[Exception, str]], occurrences: int = 0):
+    def __init__(self, key: Tuple[str, str], error: Optional[Union[Exception, str]], occurrences: int = 0):
         self.key = key
         self.error = error
         self.occurrences = occurrences
@@ -835,6 +862,7 @@ def setup_distributed_stats_event_listeners(events: Events, stats: RequestStats)
 
     def on_worker_report(client_id: str, data: Dict[str, Any]) -> None:
         for stats_data in data["stats"]:
+            print(client_id, stats_data)
             entry = StatsEntry.unserialize(stats_data)
             if entry.key not in stats.entries:
                 stats.entries[entry.key] = StatsEntry(stats, entry.key, use_data_cache=True)
