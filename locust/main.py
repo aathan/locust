@@ -258,6 +258,9 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
                     "Starting web interface at %s://0.0.0.0:%s (accepting connections from all network interfaces)"
                     % (protocol, options.web_port)
                 )
+
+            environment.events.pre_web_ui.fire(environment=environment, runner=runner)
+
             web_ui = environment.create_web_ui(
                 host=web_host,
                 port=options.web_port,
@@ -266,7 +269,7 @@ See https://github.com/locustio/locust/wiki/Installation#increasing-maximum-numb
                 tls_key=options.tls_key,
                 stats_csv_writer=stats_csv_writer,
                 delayed_start=True,
-                userclass_picker_is_active=options.class_picker,
+                userclass_picker_mode=(options.class_picker and 1) or (options.single_class_picker and 2) or 0,
             )
         except AuthCredentialsError:
             logger.error("Credentials supplied with --web-auth should have the format: username:password")

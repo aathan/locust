@@ -77,7 +77,7 @@ class WebUI:
         tls_key: Optional[str] = None,
         stats_csv_writer: Optional[StatsCSV] = None,
         delayed_start=False,
-        userclass_picker_is_active=False,
+        userclass_picker_mode=0,
     ):
         """
         Create WebUI instance and start running the web server in a separate greenlet (self.greenlet)
@@ -100,7 +100,7 @@ class WebUI:
         self.port = port
         self.tls_cert = tls_cert
         self.tls_key = tls_key
-        self.userclass_picker_is_active = userclass_picker_is_active
+        self.userclass_picker_mode = userclass_picker_mode
         app = Flask(__name__)
         CORS(app)
         self.app = app
@@ -144,7 +144,7 @@ class WebUI:
             assert request.method == "POST"
 
             # Loading UserClasses & ShapeClasses if Locust is running with UserClass Picker
-            if self.userclass_picker_is_active:
+            if self.userclass_picker_mode:
                 if not self.environment.available_user_classes:
                     err_msg = "UserClass picker is active but there are no available UserClasses"
                     return jsonify({"success": False, "message": err_msg, "host": environment.host})
@@ -219,7 +219,7 @@ class WebUI:
                     "host": environment.host,
                 }
 
-                if self.userclass_picker_is_active:
+                if self.userclass_picker_mode:
                     response_data["user_classes"] = sorted(user_classes.keys())
 
                 return jsonify(response_data)
@@ -366,8 +366,7 @@ class WebUI:
 
             for e in environment.runner.errors.values():
                 err_dict = e.serialize()
-                err_dict["name"] = escape(err_dict["name"])
-                err_dict["error"] = escape(err_dict["error"])
+                err_dict["error_key"] = escape(err_dict["error_key"])
                 errors.append(err_dict)
 
             # Truncate the total number of stats and errors displayed since a large number of rows will cause the app
@@ -540,11 +539,11 @@ class WebUI:
             "num_users": options and options.num_users,
             "spawn_rate": options and options.spawn_rate,
             "worker_count": worker_count,
-            "is_shape": self.environment.shape_class and not self.userclass_picker_is_active,
+            "is_shape": self.environment.shape_class and not self.userclass_picker_mode,
             "stats_history_enabled": options and options.stats_history_enabled,
             "tasks": dumps({}),
             "extra_options": extra_options,
-            "show_userclass_picker": self.userclass_picker_is_active,
+            "userclass_picker_mode": self.userclass_picker_mode,
             "available_user_classes": available_user_classes,
             "available_shape_classes": available_shape_classes,
         }

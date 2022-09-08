@@ -161,7 +161,7 @@ class Environment:
         tls_key: Optional[str] = None,
         stats_csv_writer: Optional[StatsCSV] = None,
         delayed_start=False,
-        userclass_picker_is_active=False,
+        userclass_picker_mode=0,
     ) -> WebUI:
         """
         Creates a :class:`WebUI <locust.web.WebUI>` instance for this Environment and start running the web server
@@ -187,7 +187,7 @@ class Environment:
             tls_key=tls_key,
             stats_csv_writer=stats_csv_writer,
             delayed_start=delayed_start,
-            userclass_picker_is_active=userclass_picker_is_active,
+            userclass_picker_mode=userclass_picker_mode,
         )
         return self.web_ui
 

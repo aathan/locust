@@ -216,7 +216,6 @@
         var ttfbChart = new LocustLineChart($(".charts-container"), "Time to first byte (ms)", ["Median TTFB", "95% TTFB"], "ms");
         var usersChart = new LocustLineChart($(".charts-container"), "Number of Users", ["Users"], "users");
 
-        window.alert("hi")
         if (stats_history["time"].length > 0) {
             rpsChart.chart.setOption({
                 xAxis: { data: stats_history["time"] },

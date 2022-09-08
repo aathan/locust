@@ -63,10 +63,6 @@ class CSVWriter(Protocol):
         ...
 
 
-class StatsBaseDict(TypedDict):
-    key: Tuple[str, str]
-
-
 EntryDictType = Dict[int, int]
 DistDictType = Dict[int, int]
 
@@ -78,7 +74,9 @@ class MinMaxTotalDict(TypedDict):
     all: EntryDictType
 
 
-class StatsEntryDict(StatsBaseDict):
+# got rid of StatsBaseDict because StatsEntry and StatsError aren't related
+class StatsEntryDict(TypedDict):
+    key: Tuple[str, str]
     last_request_timestamp: Optional[float]
     start_time: float
     num_requests: int
@@ -91,7 +89,8 @@ class StatsEntryDict(StatsBaseDict):
     num_fail_per_sec: Dict[int, int]
 
 
-class StatsErrorDict(StatsBaseDict):
+class StatsErrorDict(TypedDict):
+    error_key: str
     error: str
     occurrences: int
 
@@ -832,7 +831,7 @@ class StatsError:
 
     @classmethod
     def unserialize(cls, data: StatsErrorDict) -> "StatsError":
-        return cls(data["method"], data["name"], data["error"], data["occurrences"])
+        return cls(data["error_key"], data["error"], data["occurrences"])
 
 
 def avg(values: List[Union[float, int]]) -> float:
@@ -870,6 +869,7 @@ def setup_distributed_stats_event_listeners(events: Events, stats: RequestStats)
 
         for error_key, error in data["errors"].items():
             if error_key not in stats.errors:
+                print("error", error)
                 stats.errors[error_key] = StatsError.unserialize(error)
             else:
                 stats.errors[error_key].occurrences += error["occurrences"]

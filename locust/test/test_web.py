@@ -275,7 +275,7 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
             def t(self):
                 pass
 
-        self.environment.web_ui.userclass_picker_is_active = True
+        self.environment.web_ui.userclass_picker_mode = 1
         self.environment.available_user_classes = {"User1": User1, "User2": User2}
 
         response = requests.post(
@@ -330,7 +330,7 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
             def t(self):
                 pass
 
-        self.environment.web_ui.userclass_picker_is_active = True
+        self.environment.web_ui._is_active = True
         self.environment.available_user_classes = {"User1": User1, "User2": User2}
 
         response = requests.post(
@@ -353,7 +353,7 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
         response = requests.get("http://127.0.0.1:%i/stop" % self.web_port)
         self.assertEqual(response.json()["message"], "Test stopped")
 
-    def test_swarm_defaults_to_all_available_userclasses_when_userclass_picker_is_active_and_no_userclass_in_payload(
+    def test_swarm_defaults_to_all_available_userclasses_when_userclass_picker_mode_1_and_no_userclass_in_payload(
         self,
     ):
         class User1(User):
@@ -370,7 +370,7 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
             def t(self):
                 pass
 
-        self.environment.web_ui.userclass_picker_is_active = True
+        self.environment.web_ui.userclass_picker_mode = 1
         self.environment.available_user_classes = {"User1": User1, "User2": User2}
         response = requests.post(
             "http://127.0.0.1:%i/swarm" % self.web_port,
@@ -409,7 +409,7 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
             def t(self):
                 pass
 
-        self.environment.web_ui.userclass_picker_is_active = True
+        self.environment.web_ui.userclass_picker_mode = 1
         self.environment.available_user_classes = {"User1": User1, "User2": User2}
         response = requests.post(
             "http://127.0.0.1:%i/swarm" % self.web_port,
@@ -444,8 +444,8 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
         response = requests.get("http://127.0.0.1:%i/stop" % self.web_port)
         self.assertEqual(response.json()["message"], "Test stopped")
 
-    def test_swarm_error_when_userclass_picker_is_active_but_no_available_userclasses(self):
-        self.environment.web_ui.userclass_picker_is_active = True
+    def test_swarm_error_when_userclass_picker_mode_1_but_no_available_userclasses(self):
+        self.environment.web_ui.userclass_picker_mode = 1
         response = requests.post(
             "http://127.0.0.1:%i/swarm" % self.web_port,
             data={
@@ -483,7 +483,7 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
                 else:
                     return None
 
-        self.environment.web_ui.userclass_picker_is_active = True
+        self.environment.web_ui._is_active = True
         self.environment.available_user_classes = {"User1": User1, "User2": User2}
         self.environment.available_shape_classes = {"TestShape": TestShape()}
         self.environment.shape_class = None
@@ -509,7 +509,7 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
         response = requests.get("http://127.0.0.1:%i/stop" % self.web_port)
         self.assertEqual(response.json()["message"], "Test stopped")
 
-    def test_swarm_shape_class_defaults_to_none_when_userclass_picker_is_active(self):
+    def test_swarm_shape_class_defaults_to_none_when_userclass_picker_mode_1(self):
         class User1(User):
             wait_time = constant(1)
 
@@ -534,7 +534,7 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
 
         test_shape_instance = TestShape()
 
-        self.environment.web_ui.userclass_picker_is_active = True
+        self.environment.web_ui.userclass_picker_mode = 1
         self.environment.available_user_classes = {"User1": User1, "User2": User2}
         self.environment.available_shape_classes = {"TestShape": test_shape_instance}
         self.environment.shape_class = test_shape_instance
@@ -559,7 +559,7 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
         response = requests.get("http://127.0.0.1:%i/stop" % self.web_port)
         self.assertEqual(response.json()["message"], "Test stopped")
 
-    def test_swarm_userclass_shapeclass_ignored_when_userclass_picker_is_inactive(self):
+    def test_swarm_userclass_shapeclass_ignored_when_userclass_picker_mode_1(self):
         class User1(User):
             wait_time = constant(1)
 
@@ -582,7 +582,7 @@ class TestWebUI(LocustTestCase, _HeaderCheckMixin):
                 else:
                     return None
 
-        self.environment.web_ui.userclass_picker_is_active = False
+        self.environment.web_ui.userclass_picker_mode = 1
         self.environment.user_classes = [User1, User2]
         self.environment.available_user_classes = {"User1": User1, "User2": User2}
         self.environment.available_shape_classes = {"TestShape": TestShape()}

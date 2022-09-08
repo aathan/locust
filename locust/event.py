@@ -166,6 +166,16 @@ class Events:
     :param exit_code: Exit code for process
     """
 
+    pre_web_ui: EventHook
+    """
+    Fired when Locust is about to instantiate the web_ui
+
+    Event arguments:
+
+    :param environment: Environment instance
+    :param runner: Runner instance
+    """
+
     init: EventHook
     """
     Fired when Locust is started, once the Environment instance and locust runner instance
@@ -176,6 +186,7 @@ class Events:
     Event arguments:
 
     :param environment: Environment instance
+    :param runner: Runner instance
     """
 
     init_command_line_parser: EventHook

@@ -61,69 +61,76 @@
             <div class="padder">
                 <h2>Start new load test</h2>
                 <form action="./swarm" method="POST" id="swarm_form">
-                    {% if show_userclass_picker %}
+                    {% if userclass_picker_mode == 1 %}
                     <label for="available_user_classes">UserClasses </label>
                     <select multiple name="user_classes" id="user-classes" class="userClass">
-                        {% for user in available_user_classes %}
-                        <option value="{{user}}" selected>{{user}}</option>
+                        {% endif %}
+                        {% if userclass_picker_mode == 2 %}
+                        <label for="available_user_classes">UserClasses </label>
+                        <select name="user_classes" id="user-classes" class="userClass">
+                            {% endif %}
+                            {% if userclass_picker_mode %}
+                            {% for user in available_user_classes %}
+                            <option value="{{user}}" selected>{{user}}</option>
+                            {% endfor %}
+                        </select><br>
+                        <label for="available_shape_classes">ShapeClass </label>
+                        <select name="shape_class" id="shape-classes" class="shapeClass">
+                            {% for shape_class in available_shape_classes %}
+                            <option value="{{shape_class}}">{{shape_class}}</option>
+                            {% endfor %}
+                        </select><br>
+                        {% endif %}
+                        {% if is_shape %}
+                        <label for="user_count">Number of users <span style="color:#8a8a8a;">(peak
+                                concurrency)</span></label>
+                        <input type="text" name="user_count" id="user_count" class="val_disabled" value="-"
+                            disabled="disabled" title="Disabled for tests using LoadTestShape class" /><br>
+                        <input type="hidden" name="user_count" id="user_count" value="0" /><br>
+                        <label for="spawn_rate">Spawn rate <span style="color:#8a8a8a;">(users
+                                started/second)</span></label>
+                        <input type="text" name="spawn_rate" id="spawn_rate" class="val_disabled" value="-"
+                            disabled="disabled" title="Disabled for tests using LoadTestShape class" /><br>
+                        <input type="hidden" name="spawn_rate" id="spawn_rate" value="0" /><br>
+                        {% else %}
+                        <label for="user_count">Number of users <span style="color:#8a8a8a;">(peak
+                                concurrency)</span></label>
+                        <input type="text" name="user_count" id="user_count" class="val" value="{{ num_users or " 1" }}"
+                            onfocus="this.select()" /><br>
+                        <label for="spawn_rate">Spawn rate <span style="color:#8a8a8a;">(users
+                                started/second)</span></label>
+                        <input type="text" name="spawn_rate" id="spawn_rate" class="val" value="{{ spawn_rate or " 1"
+                            }}" onfocus="this.select()" /><br>
+                        {% endif %}
+                        <label for="host">
+                            Host <span style="color:#8a8a8a;">(e.g. http://www.example.com)</span>
+                            {% if override_host_warning %}
+                            <span style="color:#8a8a8a; font-size:12px;">(setting this will override the host on all
+                                User
+                                classes)</span></label>
+                        {% endif %}
+                        </label>
+                        <input type="text" name="host" id="host" class="val" autocapitalize="off" autocorrect="off"
+                            value="{{ host  or "" }}" onfocus="this.select()" /><br>
+                        {% if extra_options %}<label>Custom parameters:</label>{% endif %}
+                        {% for key, value in extra_options.items() %}
+                        {% if not ((value is none) or (value is boolean)) %}
+                        <label for="{{key}}">{{key}}</label>
+                        <input type="text" name="{{key}}" id="{{key}}" class="val" value="{{value}}" /><br>
+                        {% endif %}
                         {% endfor %}
-                    </select><br>
-                    <label for="available_shape_classes">ShapeClass </label>
-                    <select name="shape_class" id="shape-classes" class="shapeClass">
-                        {% for shape_class in available_shape_classes %}
-                        <option value="{{shape_class}}">{{shape_class}}</option>
+                        {% set glob={'header_printed': False} %}
+                        {% for key, value in extra_options.items() %}
+                        {% if (value is none) or (value is boolean) %}
+                        {% if not glob.header_printed %}
+                        The following custom parameters can't be set in the Web UI, because it is a boolean or None
+                        type:<br>
+                        {% set _ = glob.update({'header_printed':True}) %}
+                        {% endif %}
+                        {{key}}<br>
+                        {% endif %}
                         {% endfor %}
-                    </select><br>
-                    {% endif %}
-                    {% if is_shape %}
-                    <label for="user_count">Number of users <span style="color:#8a8a8a;">(peak
-                            concurrency)</span></label>
-                    <input type="text" name="user_count" id="user_count" class="val_disabled" value="-"
-                        disabled="disabled" title="Disabled for tests using LoadTestShape class" /><br>
-                    <input type="hidden" name="user_count" id="user_count" value="0" /><br>
-                    <label for="spawn_rate">Spawn rate <span style="color:#8a8a8a;">(users
-                            started/second)</span></label>
-                    <input type="text" name="spawn_rate" id="spawn_rate" class="val_disabled" value="-"
-                        disabled="disabled" title="Disabled for tests using LoadTestShape class" /><br>
-                    <input type="hidden" name="spawn_rate" id="spawn_rate" value="0" /><br>
-                    {% else %}
-                    <label for="user_count">Number of users <span style="color:#8a8a8a;">(peak
-                            concurrency)</span></label>
-                    <input type="text" name="user_count" id="user_count" class="val" value="{{ num_users or " 1" }}"
-                        onfocus="this.select()" /><br>
-                    <label for="spawn_rate">Spawn rate <span style="color:#8a8a8a;">(users
-                            started/second)</span></label>
-                    <input type="text" name="spawn_rate" id="spawn_rate" class="val" value="{{ spawn_rate or " 1" }}"
-                        onfocus="this.select()" /><br>
-                    {% endif %}
-                    <label for="host">
-                        Host <span style="color:#8a8a8a;">(e.g. http://www.example.com)</span>
-                        {% if override_host_warning %}
-                        <span style="color:#8a8a8a; font-size:12px;">(setting this will override the host on all User
-                            classes)</span></label>
-                    {% endif %}
-                    </label>
-                    <input type="text" name="host" id="host" class="val" autocapitalize="off" autocorrect="off"
-                        value="{{ host  or "" }}" onfocus="this.select()" /><br>
-                    {% if extra_options %}<label>Custom parameters:</label>{% endif %}
-                    {% for key, value in extra_options.items() %}
-                    {% if not ((value is none) or (value is boolean)) %}
-                    <label for="{{key}}">{{key}}</label>
-                    <input type="text" name="{{key}}" id="{{key}}" class="val" value="{{value}}" /><br>
-                    {% endif %}
-                    {% endfor %}
-                    {% set glob={'header_printed': False} %}
-                    {% for key, value in extra_options.items() %}
-                    {% if (value is none) or (value is boolean) %}
-                    {% if not glob.header_printed %}
-                    The following custom parameters can't be set in the Web UI, because it is a boolean or None
-                    type:<br>
-                    {% set _ = glob.update({'header_printed':True}) %}
-                    {% endif %}
-                    {{key}}<br>
-                    {% endif %}
-                    {% endfor %}
-                    <button type="submit">Start swarming</button>
+                        <button type="submit">Start swarming</button>
                 </form>
                 <div style="clear:right;"></div>
             </div>
@@ -173,6 +180,7 @@
                 <li><a href="#">Exceptions</a></li>
                 <li><a href="#">Current ratio</a></li>
                 <li><a href="#">Download Data</a></li>
+                <li><a href="#">Custom Data</a></li>
                 {% if is_distributed %}
                 <li><a href="#">Workers</a></li>
                 {% endif %}
@@ -223,8 +231,7 @@
                 <table id="errors" class="stats">
                     <thead>
                         <th class="error_count stats_label" data-sortkey="occurrences"># fails</th>
-                        <th class="stats_label" href="#" data-sortkey="method">Method</th>
-                        <th class="stats_label" href="#" data-sortkey="name">Name</th>
+                        <th class="stats_label" href="#" data-sortkey="key">Key</th>
                         <th class="error_type stats_label" data-sortkey="error">Type</th>
                     </thead>
                     <tbody>
@@ -254,6 +261,11 @@
                     <a href="./stats/failures/csv">Download failures CSV</a><br>
                     <a href="./exceptions/csv">Download exceptions CSV</a><br>
                     <a href="./stats/report" target="_blank">Download Report</a><br>
+                </div>
+            </div>
+            <div id="custom_data" style="display:none;">
+                <div class="custom_data" style="margin-top:20px;">
+                    <p>Nothing to see here.</p><br>
                 </div>
             </div>
             {% if is_distributed %}
@@ -386,11 +398,12 @@
     <script type="text/javascript" src="./static/locust.js?v={{ version }}"></script>
     <script type="text/javascript" src="./static/tasks.js?v={{ version }}"></script>
     <script type="text/javascript">
-        function updateTasksWithTimeout() {
+        function updatePagesWithTimeout() {
             fillTasksFromRequest()
-            setTimeout(updateTasksWithTimeout, 1000);
+            fillCustomDataFromRequest()
+            setTimeout(updatePagesWithTimeout, 1000);
         }
-        updateTasksWithTimeout()
+        updatePagesWithTimeout()
     </script>
     {% block extended_script %}
     {% endblock extended_script %}

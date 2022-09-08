@@ -35,6 +35,13 @@ function _renderTasks(data) {
     tasks.append(_getTasks_div(data.total, 'Total ratio'));
 }
 
+function _renderCustomData(data) {
+    var custom_data = $('#custom_data .custom_data');
+    custom_data.empty();
+    custom_data.html(data)
+    console.log(data)
+}
+
 function fillTasksFromObj() {
     var tasks = $('#tasks .tasks')
     var data = tasks.data('tasks');
@@ -44,5 +51,11 @@ function fillTasksFromObj() {
 function fillTasksFromRequest() {
     $.get('./tasks', function (data) {
         _renderTasks(data)
+    });
+}
+
+function fillCustomDataFromRequest() {
+    $.get('./custom_data', function (data) {
+        _renderCustomData(data)
     });
 }

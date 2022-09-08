@@ -341,12 +341,21 @@ def setup_parser_arguments(parser):
         help="Optional path to TLS private key to use to serve over HTTPS",
         env_var="LOCUST_TLS_KEY",
     )
+
     web_ui_group.add_argument(
         "--class-picker",
         default=False,
         action="store_true",
         help="Enable select boxes in the web interface to choose from all available User classes and Shape classes",
         env_var="LOCUST_USERCLASS_PICKER",
+    )
+
+    web_ui_group.add_argument(
+        "--single-class-picker",
+        default=False,
+        action="store_true",
+        help="Enable select boxes in the web interface to choose a single available User class or Shape class from all available",
+        env_var="LOCUST_SINGLE_USERCLASS_PICKER",
     )
 
     master_group = parser.add_argument_group(
