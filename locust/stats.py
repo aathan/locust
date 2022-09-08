@@ -262,7 +262,7 @@ class RequestStats:
     ) -> str:
         if key is None:
             key = cls.key_from_meta(request_meta)
-        key = f"{key[1]}.{key[0]}.{cls.parse_error(error)!r}"
+        key = f"{key[1]}.{key[0]}.{StatsError.parse_error(error)!r}"
         return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
     def log_request(self, request_meta: RequestMetaType, key: Tuple[str, str] = None, log_error=True, **kw) -> None:
@@ -297,7 +297,7 @@ class RequestStats:
 
         entry = self.errors.get(error_key)
         if entry is None:
-            entry = StatsError(key=key, error_key=error_key, error=error)
+            entry = StatsError(error_key=error_key, error=error)
             self.errors[error_key] = entry
         entry.occurred()
 
@@ -611,7 +611,7 @@ class StatsEntry:
         self.ttlb.post_value(ttlb)
         self.ttfb.post_value(request_meta.get("ttfb", _ignore))
 
-    def log_error(self, error: Optional[Union[Exception, str]], **kw) -> None:
+    def log_error(self, request_meta: RequestMetaType, error: Optional[Union[Exception, str]], **kw) -> None:
         self.num_failures += 1
         t = int(time.time())
         self.num_fail_per_sec[t] = self.num_fail_per_sec.setdefault(t, 0) + 1
@@ -782,8 +782,8 @@ class StatsEntry:
 
 
 class StatsError:
-    def __init__(self, key: Tuple[str, str], error: Optional[Union[Exception, str]], occurrences: int = 0):
-        self.key = key
+    def __init__(self, error_key: Tuple[str, str], error: Optional[Union[Exception, str]], occurrences: int = 0):
+        self.error_key = error_key
         self.error = error
         self.occurrences = occurrences
 
@@ -817,7 +817,7 @@ class StatsError:
             # standalone, unwrapped exception
             unwrapped_error = repr(error)
 
-        return f"{self.key}: {unwrapped_error}"
+        return f"{self.error_key}: {unwrapped_error}"
 
     def serialize(self) -> StatsErrorDict:
         def _getattr(obj: "StatsError", key: str, default: Optional[Any]) -> Optional[Any]:
