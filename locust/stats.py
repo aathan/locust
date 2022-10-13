@@ -861,7 +861,7 @@ def setup_distributed_stats_event_listeners(events: Events, stats: RequestStats)
 
     def on_worker_report(client_id: str, data: Dict[str, Any]) -> None:
         for stats_data in data["stats"]:
-            print(client_id, stats_data)
+            # print(client_id, stats_data)
             entry = StatsEntry.unserialize(stats_data)
             if entry.key not in stats.entries:
                 stats.entries[entry.key] = StatsEntry(stats, entry.key, use_data_cache=True)
@@ -869,7 +869,7 @@ def setup_distributed_stats_event_listeners(events: Events, stats: RequestStats)
 
         for error_key, error in data["errors"].items():
             if error_key not in stats.errors:
-                print("error", error)
+                # print("error", error)
                 stats.errors[error_key] = StatsError.unserialize(error)
             else:
                 stats.errors[error_key].occurrences += error["occurrences"]
